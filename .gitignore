@@ -1,0 +1,33 @@
+# Personal configuration and contact data. Never commit these.
+notify.yml
+contacts.yml
+EMAILS.md
+
+# Your own state: tasks, statuses, added and dropped venues.
+tasks.yml
+state.yml
+my_venues.yml
+dropped.yml
+
+# Generated board. Rebuild with scrape.py then build.py.
+# These carry whatever is in your local contacts.yml and notify.yml, so they
+# stay out of version control.
+deadlines.json
+index.html
+labs_cache.yml
+notify.log
+
+# Planning notes and backups
+PLAN.md
+*.bak-*
+*.bak
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# macOS
+.DS_Store

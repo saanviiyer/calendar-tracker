@@ -1,0 +1,54 @@
+name: Refresh deadlines
+
+# Twice a week is the right cadence: workshop organizers set OpenReview due dates
+# in bursts after acceptance notifications, and main-conference calls appear
+# weeks apart. Runs at 13:00 UTC (06:00 Pacific) so a fresh board is waiting.
+on:
+  schedule:
+    - cron: "0 13 * * 1,4"
+  workflow_dispatch:        # lets you trigger a refresh by hand from the Actions tab
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pyyaml
+
+      - name: Scrape deadlines
+        run: python3 scrape.py --probe
+
+      - name: Bake data into the page
+        run: python3 build.py
+
+      - name: Commit any changes
+        run: |
+          git config user.name "deadline-bot"
+          git config user.email "actions@github.com"
+          if git diff --quiet -- deadlines.json index.html; then
+            echo "No deadline changes."
+          else
+            git add deadlines.json index.html
+            git commit -m "Refresh deadlines ($(date -u +%Y-%m-%d))"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - uses: actions/deploy-pages@v4

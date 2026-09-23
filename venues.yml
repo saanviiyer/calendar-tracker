@@ -1,0 +1,3116 @@
+# Venues tracked on the deadline board.
+#
+# This file is the hand-maintained source of truth. `scrape.py` reads it, then
+# tries to improve each entry from the ccfddl and huggingface/ai-deadlines
+# feeds, and writes deadlines.json. Edit here, never in deadlines.json.
+#
+# Per-venue keys:
+#   name        display name (required)
+#   link        CFP or important-dates page
+#   date        YYYY-MM-DD. Omit if unknown.
+#   approx      true when `date` is a guess at the month rather than the day
+#   track       grouping label shown on the board
+#   note        free text; the scraper appends its findings to this
+#   match       feed titles to look up. Defaults to `name`.
+#   no_feed     true for venues no aggregator covers — skips the lookup
+#   pin_date    keep `date` even if a feed disagrees; the difference is noted
+#   probe       with `--probe`, fetch `link` and try to read a date off the page
+#   labs        industry labs among the organizers and speakers. Hand-written
+#               entries are verified rosters; `--labs` also fills this in
+#               automatically for discovered workshops, badged "auto-read".
+#   labs_note   who specifically, and in what role. Worth writing by hand — a
+#               DeepMind sponsor logo and a DeepMind intern are not the same news.
+#
+# Research areas driving the venue selection: EEG and neuroimaging, cortical
+# parcellation, computational neuroscience, bio-plausible continual learning,
+# protein and molecular ML, health and clinical AI, HCI, NLP.
+
+# Deadlines are reported in this timezone. OpenReview stores exact instants, so
+# a deadline set at "Aug 29 AoE" surfaces here as the local wall-clock moment.
+timezone: America/Los_Angeles
+
+# Your projects. Each venue gets a "best fit" chip on the board, either from an
+# explicit `fit:` on the venue or, failing that, by matching these keywords
+# against the venue name. Explicit always wins — keyword matching is only there
+# so auto-discovered workshops aren't left blank.
+# `readiness` drives the odds estimate as much as the venue does — a selective
+# venue with a finished paper beats a friendly one with nothing written.
+#   ready    a draft with real numbers exists now
+#   partial  results exist, writing or a blocker outstanding
+#   early    no results yet; submitting would mean starting from scratch
+projects:
+  gauntlet:
+    name: Gauntlet
+    blurb: auditing whether protein-design fitness proxies measure the biology they claim to
+    readiness: ready
+    readiness_note: >-
+      Phase 1 landed on real data — ESM-2 650M zero-shot ranks measured PET-hydrolase activity
+      at within-study rho = +0.007 across 504 variants, losing outright to a bare mutation count.
+      Two workshop papers drafted (Verify-Agents 6pp, AI4Science Verification 5pp) for the Aug 29
+      and Aug 30 deadlines. Open: the two-dataset generalization (RuBisCO DMS + SSMuLA) gated to
+      Aug 20, and the proto-language contribution that feeds the Arc AIxBio application.
+    keywords:
+      - protein
+      - enzyme
+      - molecul
+      - chem
+      - bio
+      - sequence
+      - benchmark
+      - evaluat
+      - verif
+      - discovery
+  prism:
+    name: PRISM
+    blurb: COSMIC signatures, ESM-2 drift toward Pfam centroids, genomic-LLM failure modes
+    readiness: partial
+    readiness_note: >-
+      Three papers drafted with real numbers (ICBINB 6pp, SIMBIOCHEM 4pp, MoML 4pp)
+      and Overleaf zips built. Downgraded from ready 2026-08-11: the Proto rerun
+      shows a composition-matched arm ties or beats the signature arm (0.0764 vs
+      0.0736), so the 3.4x design-loop result is base composition and not the
+      mutational process. Abstracts in ml4molecules and sim2science asserted the
+      opposite and were corrected. Open: Evo2 needs an A100, the SIMBIOCHEM
+      structural readout needs the ESMFold pilot re-run, and an amino-acid
+      frequency regression is pending that would tell us whether the external
+      Pfam-oracle confirmation inherits the same composition confound.
+    keywords: [protein, molecul, chem, genom, omics, drug, bio, sequence, simulat, discovery, spatial]
+  clera:
+    name: CLERA
+    blurb: Regional localization of EEG abnormalities, clinical
+    readiness: early
+    readiness_note: >-
+      Design document and evaluation protocol exist, TUSZ was still downloading,
+      no localization results yet. Anything before roughly October means writing
+      from scratch against an unfinished model.
+    keywords: [eeg, bci, brain, signal, epilep, clinic]
+  biocl:
+    name: biocl
+    blurb: Critical-Period Dale, bio-plausible continual learning and loss of plasticity
+    readiness: ready
+    readiness_note: >-
+      Extended abstract drafted; full diagnosis-plus-fix arc reproduces on both
+      Split-CIFAR-10 and FashionMNIST. Includes a clean negative (critical-period
+      scheduling fails), which suits workshops and hurts at main tracks.
+    keywords: [continual, lifelong, forget, plastic, developmental, curricul]
+  cortseer:
+    name: CortSeer
+    blurb: FCD lesion localization from MRI, nnU-Net probability maps
+    readiness: partial
+    readiness_note: >-
+      Results are solid and the insula reassignment is recomputed, so abstracts are
+      easy. The unresolved top-3 to top-4 framing change still needs a decision
+      before any full paper.
+    keywords: [imaging, radiolog, mri, segment, patholog, diagnos]
+  deejai:
+    name: deejai
+    blurb: Agentic web DAW for vocal production
+    readiness: early
+    readiness_note: >-
+      A working system, but no user study and no evaluation. HCI venues review
+      studies, not artifacts, so a submission would need one built first.
+    keywords: [interface, interaction, creativ, audio]
+  igbot:
+    name: science-IG-bot
+    blurb: Automated science-communication pipeline
+    readiness: early
+    readiness_note: >-
+      Pipeline works but is unevaluated, and the accounts do not exist yet. No
+      research claim to defend without a study of what the output does.
+    keywords: [communicat, outreach, responsible]
+
+# How selective a venue is, which sets the ceiling on the odds estimate.
+#   curated    abstracts/posters screened for scope, rarely rejected outright
+#   workshop   peer-reviewed but broad; most on-topic work with real results gets in
+#   selective  competitive archival venue, a strong minority of submissions accepted
+#   toptier    main tracks of the big conferences, roughly a quarter accepted
+venue_kinds:
+  curated:       {label: "curated / poster",    base: likely}
+  workshop:      {label: "workshop review",     base: likely}
+  selective:     {label: "competitive",         base: plausible}
+  toptier:       {label: "top-tier main",       base: longshot}
+  student_prize: {label: "student prize",       base: plausible}
+  fellowship:    {label: "national fellowship", base: longshot}
+  internship:    {label: "research internship", base: plausible}
+  outreach:      {label: "outreach",            base: likely}
+  phd:           {label: "PhD application",     base: plausible}
+
+# Workshops inside big conferences: every accepted NeurIPS/ICLR/ICML workshop
+# registers a submission invitation on OpenReview carrying an exact due date,
+# usually weeks before its own website is finished. The scraper walks those
+# listings and keeps workshops whose name or title matches `keywords`. Add a
+# conference year here as soon as it opens and new workshops appear on their own.
+workshop_discovery:
+  # Only conferences still ahead of us. ICLR/ICML 2026 already happened, and
+  # OpenReview rejects lookups against their expired submission invitations.
+  # The 2027 entries are empty today and fill themselves in as workshops are
+  # accepted — that is the point of listing them early.
+  domains:
+    - NeurIPS.cc/2026
+    - ICLR.cc/2027
+    - ICML.cc/2027
+    - NeurIPS.cc/2027
+  keywords:
+    # biology, chemistry, molecules
+    - bio
+    - chem
+    - molecul
+    - protein
+    - drug
+    - genom
+    - omics
+    - spatial
+    # brain, neuro, cognition
+    - neuro
+    - brain
+    - eeg
+    - bci
+    - cognit
+    # health and clinic
+    - health
+    - clinic
+    - medic
+    - patholog
+    - diagnos
+    # learning dynamics relevant to the critical-period / continual work
+    - continual
+    - lifelong
+    - forget
+    - plastic
+    - developmental
+    # failure modes, robustness, interpretability
+    - icbinb
+    - believe
+    - failure
+    - interpret
+    # multimodal grounding
+    - vision-language
+    - vlm
+    - grounded
+    # science-of-ML
+    - discovery
+    # Added 2026-07-31 after a manual sweep of all 100 NeurIPS 2026 workshops found
+    # three strong fits that title keywords alone had missed. "AI for Science
+    # Workshop: Verification in the Age of AI Scientists" and "Sim2Science: ML with
+    # Imperfect Scientific Models" contain none of the words above, yet the first is
+    # the least selective workshop on the board and the second is the only one Google
+    # DeepMind sponsors. The lesson: match the *methodology* vocabulary too, not just
+    # the subject matter.
+    - science
+    - scientific
+    - simulat
+    - verif
+    - reproduc
+    - falsifi
+    - measurement
+    - agentic
+    - benchmark
+  exclude_keywords:
+    - queer in ai
+    - lxai
+    - africa in ai
+    - global south
+    - music
+    - game
+    - law
+    - finance
+    - robot
+
+venues:
+
+  # ---------------------------------------------------------------- on the
+  # original list, dates you supplied
+  - name: Biohub Chicago Bioengineering Conference
+    kind: curated
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          A 150-word poster abstract and one of the four themes is AI x Bio. The
+          SBS17a to PF17041 headline is already a one-paragraph story.
+      - project: cortseer
+        strength: moderate
+        why: >-
+          Bioengineering framing fits, but the imaging work is a weaker match for
+          the omics-heavy themes.
+    link: https://biohub.org/events/chicago-bioengineering-conference-2026/
+    date: 2026-07-31
+    track: Bioengineering
+    no_feed: true
+    pin_date: true
+    note: >-
+      Confirmed: "All abstracts must be submitted by July 31; submissions received
+      after this deadline will not be considered." Poster only, 150 words or fewer,
+      no time-of-day published — so treat it as end of the working day. One of the
+      four themes is AI x Bio. Poster session Sept 17, Sheraton Grand Chicago.
+      A 150-word abstract is the cheapest submission on this whole board.
+
+  - name: Neuralink — apply to neuroengineer positions
+    link: https://neuralink.com/careers/
+    date: 2026-08-03
+    kind: internship
+    track: Job
+    pin_date: true
+    fit:
+      - project: clera
+        strength: strong
+        why: >-
+          Neural decoding from electrode recordings is the same problem family as
+          EEG abnormality localization — closest direct match in your portfolio.
+      - project: cortseer
+        strength: moderate
+        why: Neuroimaging and electrode targeting overlap; less direct than CLERA.
+    eligibility: >-
+      NOT VERIFIED — I have not checked Neuralink's open roles, so I do not know
+      which neuroengineering positions are live, whether any are intern or new-grad,
+      or their work-authorization requirements. Check the board before Monday.
+    note: >-
+      Self-imposed deadline, not a posted one — you said Monday. Neuralink hires
+      rolling, so nothing closes on the 3rd; the date is the commitment, not a cliff.
+      Note it lands on the same day as the PSB paper deadline and the ARR cycle, so
+      if PSB is going in, do Neuralink either Sunday or Tuesday rather than stacking
+      three things on one day.
+  - name: PSB 2027 — papers (archival proceedings)
+    kind: selective
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          Archival, peer-reviewed, full length, and squarely comp-bio. The catch
+          is that this is a different artifact from the three workshop drafts — no
+          PSB-shaped paper exists yet.
+      - project: clera
+        strength: weak
+        why: >-
+          Clinical EEG is in scope for PSB, but there are no results to write up.
+    link: https://psb.stanford.edu/callfor/papers/
+    date: 2026-08-03
+    track: Comp bio
+    no_feed: true
+    pin_date: true
+    note: >-
+      11:59 PM PT and the page says "All deadlines are firm. No extensions." Your
+      original note said submit by 7/31 — keep that buffer. PSB 2027 is Jan 3-7,
+      Big Island. Notification Sept 8, camera-ready Oct 1.
+
+  - name: PSB 2027 — poster abstracts (non-archival)
+    kind: curated
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          Non-archival poster route, four months later. Costs nothing later and
+          still gets you to the meeting.
+      - project: cortseer
+        strength: moderate
+        why: >-
+          Clinical imaging posters are welcome here.
+    link: https://psb.stanford.edu/callfor/posters/
+    date: 2026-12-01
+    track: Comp bio
+    no_feed: true
+    pin_date: true
+    note: >-
+      The fallback route into PSB, four months after the paper deadline and
+      non-archival, so it costs you nothing later. 11:59 PM PT. Worth holding as
+      a backup if the Aug 3 paper doesn't make it.
+
+  - name: ASCI — AI at Scale for Clinical Impact (Cancer Pathology Foundation Models)
+    link: https://asci.artificialintelligencepathology.org/
+    date: 2026-08-19
+    track: NeurIPS workshop
+    no_feed: true
+    openreview: NeurIPS.cc/2026/Workshop/ASCI
+    fit:
+      - project: cortseer
+        strength: moderate
+        why: Clinical-impact imaging foundation models; pathology rather than MRI, so adjacent not aligned.
+    note: >-
+      DATE UNVERIFIED AGAINST THE WORKSHOP'S OWN SITE — asci.artificialintelligencepathology.org
+      returns HTTP 403 to automated fetching, so Aug 19 comes from OpenReview alone
+      and no second track could be ruled out. Open it in a browser before relying
+      on it; it is the earliest of the NeurIPS workshop cluster by ten days, which
+      is unusual enough to be worth confirming.
+  - name: NeurIPS SIMBIOCHEM 2026 — Simulations for Biology and Chemistry
+    kind: workshop
+    fit:
+      - project: prism
+        strength: moderate
+        why: >-
+          The stretch venue: the workshop is MD, force-field and free-energy
+          centric, so COSMIC-as-simulator needs the structural readout to be
+          legible. simbiochem_prism.tex is drafted but the ESMFold pilot is still
+          pending.
+    link: https://www.simbiochem.com/
+    date: 2026-08-29
+    track: NeurIPS workshop
+    no_feed: true
+    openreview: NeurIPS.cc/2026/Workshop/Simbiochem
+    note: >-
+      2nd edition, Sydney, Dec 11. The site states 11:59 PM UTC, which is NOT
+      Anywhere-on-Earth — you lose most of a day versus the usual AoE cutoff.
+
+  - name: NeurReps 2026 — Symmetry and Geometry in Neural Representations
+    kind: workshop
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          Fits the LOCALITY study, not the Dale paper — and only after a reframe.
+          What belongs here is the mechanism dissociation (end-of-stream effective
+          rank 1.4 dfa to 8.9 pc of 256 units, gradient alignment varying tenfold,
+          forgetting indifferent to both) and the sparsity result (BWT tracks the
+          active fraction and nothing else, -13 at 0.5% active to -83 at dense).
+          Geometry has to become the object and forgetting the readout; submitting
+          the Dale paper as written reads as a continual-learning paper that
+          happens to compute effective rank. NOTE the strongest geometry angle —
+          depth-dependent rank collapse under sign constraints — is already CLOSED
+          by Jacot, Timor, Daneshmand, Dong and Shin & Yun, and the corrected v3
+          run shows the depth trend is not constraint-specific. Resolve first why
+          Dale gives dead-unit fraction 1.00 while the local rules give 0.000 with
+          rank collapse anyway; that contrast is either the contribution or the
+          confusion.
+    link: https://neurreps.org/
+    date: 2026-08-23
+    track: NeurIPS workshop
+    no_feed: true
+    openreview: NeurIPS.cc/2026/Workshop/NeurReps_Extended_Abstracts
+    labs: [Google DeepMind, Goodfire, NTT Research, Bayer]
+    labs_note: >-
+      Verified by hand 2026-07-31. Mikhail Galkin (Google DeepMind) speaks, with
+      Ekdeep Lubana (Goodfire) and Hidenori Tanaka (NTT Research) on the geometry
+      and neuroscience panel; Alison Pouplin (Bayer AG) organizes. Thinner than
+      the AI-for-science venues, but a 5th edition means a real track record.
+    note: >-
+      EARLIEST NeurIPS DEADLINE YOU ARE CONSIDERING — Aug 22 AoE, eight days ahead
+      of the CL4FMAgents and DevAI cluster. THREE TRACKS, one deadline, and the
+      choice matters: this row is the 4-page EXTENDED ABSTRACT track, non-archival,
+      which is the one that protects ICLR 2027. The PROCEEDINGS track (9pp) goes to
+      a PMLR volume — archival, and it would foreclose the locality paper. A new
+      FINDINGS track has no page limit and is single-blind, editorially reviewed,
+      pitched at Cell/Nature/Science-caliber work; not your route. Sydney, Dec
+      11-12. No sponsors and no area chairs announced yet.
+
+  - name: NeurIPS AI4Science 2026 — Verification in the Age of AI Scientists
+    kind: workshop
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          The theme is verification, and PRISM's strongest material is verification
+          work: the duplicate-row self-audit (4104 hits to 2241), the hub-confound
+          control (48x/61x enrichment against a 0.7% baseline), and the LOSO negative
+          showing the 0.937 AUC was seen-signature memorization. That is a paper
+          about how you check an AI scientist's claims, which is the stated topic.
+    link: https://ai4sciencecommunity.github.io/neurips26.html
+    date: 2026-08-30
+    track: NeurIPS workshop
+    no_feed: true
+    openreview: NeurIPS.cc/2026/Workshop/AI4Science
+    labs: [Google DeepMind, Microsoft Research]
+    labs_note: >-
+      Confirmed against the workshop site 2026-07-31. Emilien Dupont (Google
+      DeepMind) and Yuanqi Du (Microsoft Research) organize, alongside Marinka
+      Zitnik (Harvard) and Priya Donti (MIT); Adam Zsolt Wagner (Google DeepMind)
+      gives the AI-for-Mathematics talk; Rianne van den Berg (Microsoft Research)
+      sits on the verification-gap panel with David Rolnick.
+    note: >-
+      HIGHEST ACCEPTANCE ODDS ON THE BOARD. 7th edition of the AI for Science
+      series; the 2025 edition put roughly 401 posters on the NeurIPS virtual
+      schedule, and the organizers' own FAQ concedes the volume problem. 4-8 pages
+      with unlimited references and appendices, NeurIPS 2026 template, NO checklist
+      needed, footnote must be changed to name the workshop. Non-archival — accepted
+      papers are posted on the site only. Sydney, Dec 11 or 12, so it DOES combine
+      with ICBINB-BIO and SIMBIOCHEM in one trip (Sim2Science does not — that one is
+      Paris). ABSTRACT GATE: the FAQ confirms one exists and that it only requires
+      creating the OpenReview submission tab, but no date for it is published in
+      the dates list, so open the OpenReview group early rather than assuming you
+      can start on the 29th. Site says submission Aug 29 AoE while the OpenReview
+      invitation closes Aug 30 23:59 UTC, about twelve hours later; trust the
+      earlier one. Rebranded from the generic AI for Science title — the 2026 theme
+      is verification, which is why PRISM's self-audit and LOSO negative fit.
+
+  - name: NeurIPS Sim2Science 2026 — ML with Imperfect Scientific Models
+    kind: workshop
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          "Imperfect scientific models" describes PRISM almost literally: COSMIC
+          signatures as an imperfect generative model of mutation, plus the S669
+          result showing the ESM-2 masked-LM ddG proxy is directionally right
+          (rho -0.11 at 8M, -0.25 at 650M) but quantitatively ungrounded. The
+          measurement-validity angle is the paper.
+    link: https://www.sim2science.com/
+    date: 2026-08-30
+    track: NeurIPS workshop
+    no_feed: true
+    openreview: NeurIPS.cc/2026/Workshop/Sim2Sci
+    labs: [Google DeepMind, Hugging Face, CuspAI, Proxima Fusion]
+    labs_note: >-
+      Verified by hand 2026-07-31. The only NeurIPS 2026 workshop where Google
+      DeepMind appears in all three roles at once: Noemi Elteto organizes, Pablo
+      Samuel Castro speaks, and GDM is a confirmed SPONSOR alongside Hugging Face
+      (whose Georgia Channing also organizes). Max Welling advises via CuspAI.
+    note: >-
+      Paris, Dec 12-13 — NOT Sydney, so it does not combine with ICBINB or
+      SIMBIOCHEM in one trip. 5 pages, or 2 for a tiny paper; non-archival.
+      Unusually permissive: reciprocal review, and recently published or
+      under-review work is explicitly welcome, which makes this about as friendly
+      as a workshop gets.
+
+  - name: NeurIPS WiML 2026 — Women in Machine Learning
+    kind: workshop
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          One-page abstract already drafted and compiled from the ICBINB
+          failure-modes result (the metric-audit reframe): composition control,
+          gameability, and the honest downgrade of SBS17a to a
+          composition-associated embedding effect.
+    link: https://www.wiml.org/
+    date: 2026-08-17
+    track: NeurIPS workshop
+    no_feed: true
+    pin_date: true
+    openreview: NeurIPS.cc/2026/Workshop/WiML
+    note: >-
+      NEAREST DEADLINE ON THE BOARD. The OpenReview invitation is due
+      2026-08-18 02:00 UTC and expires 02:30 UTC, which is 7:00pm PDT on
+      Aug 17 — the date shown here is local, so do NOT read it as "all of
+      Aug 18". Verified 2026-08-07 from the submission invitation itself
+      (api2.openreview.net .../2026/Workshop/WiML/-/Submission), because the
+      workshop site sits behind a Google login and the public CFP pages do
+      not state the format. Requirements: 1 page; PDF only, .pdf, 50 MB cap;
+      NO template or style file is required, so plain article is correct and
+      must not be "upgraded" to a NeurIPS style; the submission checklist
+      requires "I confirm that the submission is ANONYMOUS" — the draft is
+      anonymized accordingly, and presenter identity is captured by the
+      form's confirm_age field rather than the PDF. First or co-first author
+      on AT MOST ONE WiML submission. Non-archival. Names are published only
+      after the conference. Note the affinity-workshop eligibility rule: the
+      presenter must identify as a woman or nonbinary adult.
+
+  - name: NeurIPS AgenticLS 2026 — Agentic AI for Biological Discovery
+    kind: workshop
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          The "Closed-Loop Discovery" track is a direct description of the Proto
+          design campaign — signature-biased proposal beating matched-random toward
+          PF17041 (0.103 vs 0.124, and random's final best reached in 1 step versus
+          215), with the ddG trajectory as the foldability-gate motivation.
+    link: https://agenticls.github.io/
+    date: 2026-09-16
+    track: NeurIPS workshop
+    no_feed: true
+    pin_date: true
+    openreview: NeurIPS.cc/2026/Workshop/AgenticLS
+    labs: [OpenAI, Genentech, Roche, BioMap]
+    labs_note: >-
+      Verified by hand 2026-07-31 — the deepest SENIOR-industry roster of any
+      NeurIPS 2026 workshop, though no DeepMind. Aviv Regev (EVP, Head of Research
+      and Early Development, Genentech/Roche) is the sole advisory board member;
+      Masatoshi Uehara (OpenAI), Xiner Li and Ehsan Hajiramezanali (Genentech) and
+      Le Song (Chief AI Scientist, BioMap) are four of the six organizers.
+    note: >-
+      FREE CAPACITY — deadline is Sept 16, 11:59pm AoE, three weeks clear of the
+      Aug 29-30 crush, so this costs nothing that the other submissions need.
+      8-page full papers or 4-page extended abstracts, non-archival, at least three
+      reviews and no reviewer given more than three papers. First edition. OpenReview
+      had not published a submission invitation as of Jul 31, hence pin_date.
+
+  - name: AI4BCI 2026 — AI for Brain-Computer Interface
+    kind: curated
+    fit:
+      - project: clera
+        strength: strong
+        why: >-
+          Topic list names neural decoding and neural foundation models, which is
+          CLERA's framing. Non-archival 2-pager, and Sept 21 gives more runway
+          than any other CLERA option.
+    link: https://www.ai4bci.com/
+    date: 2026-09-21
+    track: Neuro + BCI
+    no_feed: true
+    pin_date: true
+    note: >-
+      Resolved: your 8/30 was wrong, the real deadline is Sept 21 2026 — three
+      extra weeks. 1st International Symposium, Univ. of Manchester, Nov 30 - Dec 1.
+      Non-archival 2-page extended abstract + poster, notification Oct 21. Topics
+      include neural foundation models and neural decoding, so CLERA's regional
+      localization framing fits directly. No time-of-day published.
+
+  - name: NeurIPS VLM4RWD 2026 — Grounded and Faithful Vision-Language Models
+    kind: workshop
+    fit:
+      - project: prism
+        strength: weak
+        why: >-
+          Vision-language grounding; nothing on your list is a VLM paper. Probably
+          drop this one unless something changed.
+    link: https://vlm4rwd.github.io/
+    date: 2026-08-30
+    track: NeurIPS workshop
+    no_feed: true
+    openreview: NeurIPS.cc/2026/Workshop/VLM4RWD
+
+  - name: NeurIPS ICBINB-BIO 2026 — Failure Modes of AI in Biology
+    kind: workshop
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          The most natural fit on the entire board. Repetition collapse, the
+          spurious SBS7c artifact, the duplicate-row self-audit and the LOSO
+          negative are all literally this workshop's subject. Negative results are
+          the point here.
+    link: https://icbinb-bio.github.io/
+    date: 2026-08-29
+    track: NeurIPS workshop
+    no_feed: true
+    openreview: NeurIPS.cc/2026/Workshop/ICBINB-BIO
+    note: >-
+      PRISM's primary target. Native fit: the repetition-collapse and spurious-
+      SBS7c artifacts, the duplicate-row self-audit, and the LOSO negative
+      (mechanism memorization, not learning) are all exactly this workshop's
+      subject. Negative results are the point here, not a weakness.
+
+  - name: NeurIPS DevAI 2026 — regular papers (archival)
+    kind: workshop
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          Developmental framing is exact — but this is the ARCHIVAL track and
+          would foreclose the ICLR plan. Prefer the Oct 13 row.
+    link: https://sites.google.com/view/devai-workshop-2026/important-dates
+    date: 2026-08-29
+    track: NeurIPS workshop
+    no_feed: true
+    openreview: NeurIPS.cc/2026/Workshop/DevAI
+    note: >-
+      ARCHIVAL track — 23:59 AoE. Archival publication would block a later ICLR
+      main submission, so this is probably NOT the track you want; see the
+      non-archival extended-abstract row closing Oct 13. Atlanta, Dec 12-13 2026.
+
+  - name: NeurIPS DevAI 2026 — extended abstracts (non-archival)
+    kind: workshop
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          The intended target. Non-archival preserves ICLR, and Critical-Period
+          Dale plus the conv-reinit fix is exactly a developmental-perspectives
+          story.
+    link: https://sites.google.com/view/devai-workshop-2026/important-dates
+    date: 2026-10-13
+    track: NeurIPS workshop
+    no_feed: true
+    pin_date: true
+    note: >-
+      This is the track in your biocl plan: non-archival, 23:59 AoE, notification
+      Oct 20, chosen deliberately to preserve a later ICLR main submission of the
+      full work. Critical-Period Dale plus the conv-reinit fix is the arc.
+
+  - name: NeurIPS ML4SpatialBio 2026 — ML for Spatially Resolved Biology
+    kind: workshop
+    fit:
+      - project: prism
+        strength: weak
+        why: >-
+          Spatial omics rather than sequence and mutational signatures. Adjacent,
+          not aligned.
+    link: https://imsb-uke.github.io/ml4spatialbio-2026/
+    date: 2026-08-29
+    track: NeurIPS workshop
+    no_feed: true
+    openreview: NeurIPS.cc/2026/Workshop/ML4SpatialBio
+    note: Paris satellite rather than Sydney. Deadline is AoE.
+
+  - name: ARR — August 2026 cycle (commits to EACL 2027)
+    kind: selective
+    fit:
+      - project: igbot
+        strength: weak
+        why: >-
+          ARR is the NLP pipeline. Nothing on your list is an NLP paper right now.
+    link: https://aclrollingreview.org/dates
+    date: 2026-08-03
+    track: NLP
+    no_feed: true
+    note: >-
+      ACL Rolling Review runs everything now — you submit to a cycle, then commit
+      to a venue. This cycle commits to EACL 2027 (commitment due Oct 11 2026).
+      Next cycles: Oct 12 2026 (NAACL/COLING 2027), then January 2027 (ACL 2027).
+
+  - name: AAAI-27 — Special Track on AI Alignment
+    kind: selective
+    fit:
+      - project: biocl
+        strength: weak
+        why: >-
+          An alignment special track, not a continual-learning one. Weak fit and
+          the clock is short.
+    link: https://aaai.org/conference/aaai/aaai-27/aia-call/
+    date: 2026-08-21
+    track: ML main
+    no_feed: true
+    pin_date: true
+    note: >-
+      The AAAI-27 main technical track already closed (abstracts Jul 21, papers
+      Jul 28 2026, no exceptions). This alignment special track is the only
+      remaining route into AAAI-27: abstracts Aug 14, papers Aug 21.
+
+  - name: RSNA 2026 — Cutting-Edge Research abstracts
+    kind: curated
+    fit:
+      - project: cortseer
+        strength: strong
+        why: >-
+          Abstract only, and CER's stated priorities include imaging biomarkers
+          and precision imaging — FCD localization from nnU-Net probability maps
+          lands squarely. An abstract can also sidestep the unresolved top-3 vs
+          top-4 framing.
+    link: https://www.rsna.org/annual-meeting/abstract-submission
+    date: 2026-08-05
+    track: Clinical
+    no_feed: true
+    note: >-
+      Closes 12 p.m. CT — a midday deadline, not midnight. The general RSNA 2026
+      abstract call already closed; this is the remaining route.
+
+  - name: SfN Neuroscience 2026 — Late-Breaking Abstracts
+    kind: curated
+    fit:
+      - project: clera
+        strength: moderate
+        why: >-
+          Late-breaking abstracts are curated, so getting in is mostly about
+          submitting early against the 2,500 cap.
+      - project: cortseer
+        strength: strong
+        why: >-
+          Clinical epilepsy imaging is core SfN territory and the results already
+          exist.
+    link: https://www.sfn.org/meetings/neuroscience-2026/late-breaking-abstracts
+    date: 2026-09-15
+    track: Neuro
+    no_feed: true
+    note: >-
+      EFFECTIVELY FIRST-COME, FIRST-SERVED: "September 15, 5 p.m. EDT:
+      Submissions close, unless 2,500 cap has been reached" — the window can shut
+      BEFORE the 15th, so treat Sept 8 as the real date. 5 p.m. EDT, not AoE.
+      NONREFUNDABLE $260 submission fee, so decide before you start. The regular
+      abstract deadline passed in June 2026.
+
+  - name: MLHC 2027 — Machine Learning for Healthcare (Research Track)
+    link: https://mlhc.org/paper-submission
+    date: 2027-04-17
+    approx: true
+    kind: selective
+    track: Health AI
+    no_feed: true
+    fit:
+      - project: clera
+        strength: strong
+        why: >-
+          Clinical EEG abnormality localization is exactly MLHC's subject, and by
+          April 2027 CLERA should have the results it currently lacks.
+      - project: cortseer
+        strength: strong
+        why: FCD lesion localization is a clinical ML result with a real deployment story.
+    eligibility: >-
+      Research Track has no clinician requirement. IMPORTANT CATCH on the easier
+      route: the 2-page Clinical Abstracts Track requires that "the first or senior
+      author must be a clinician (MD/DO, RN, etc.) or a clinician-in-training" — so
+      it is closed to you unless a clinical collaborator fronts it. Worth knowing,
+      because that track is otherwise the cheapest way in.
+    award: >-
+      Research Track is ARCHIVAL, published in Proceedings of Machine Learning
+      Research, open access with no article processing fee. 10-15 pages excluding
+      references, 15 a hard cap.
+    note: >-
+      DATE IS PROJECTED, not published — MLHC 2026 closed 17 April 2026 (AoE) and
+      the 2027 call is not up yet, so this rolls that forward. MLHC 2026 itself
+      runs 12-14 August 2026, i.e. next week, so watch mlhc.org shortly after for
+      the 2027 cycle.
+      NOT THE SAME VENUE as the ML4H symposium already on your board: ML4H is the
+      NeurIPS-adjacent symposium in December, MLHC is a standalone August
+      conference with PMLR proceedings. Both are worth having.
+      One consequence of archival: a Research Track paper forecloses submitting the
+      same work to a main conference later, unlike ML4H's findings track.
+  - name: ML4H 2026 Symposium
+    kind: workshop
+    fit:
+      - project: clera
+        strength: moderate
+        why: >-
+          Right venue, wrong time — TUSZ was still downloading and there are no
+          localization results. ISBI in October is the realistic first CLERA home.
+      - project: cortseer
+        strength: moderate
+        why: >-
+          FCD localization would fit ML4H well if written up instead.
+    link: https://ml4h.ahli.cc/
+    date: 2026-09-10
+    track: Health AI
+    no_feed: true
+    note: >-
+      Symposium Dec 6-7 2026, Sydney. Verified 2026-07-31: date holds but the
+      portal has NOT opened ("Submission Portal: Opening soon"), so there is still
+      no exact AoE cutoff and no confirmation of the usual Proceedings vs Findings
+      track split. Re-check once OpenReview goes live.
+
+  - name: AMIA 2027 Amplify Informatics Conference
+    kind: curated
+    fit:
+      - project: cortseer
+        strength: moderate
+        why: >-
+          Informatics framing rather than methods; a fit but not a natural home.
+      - project: clera
+        strength: weak
+        why: >-
+          Nothing written yet, and AMIA wants clinical-informatics framing.
+    link: https://amia.org/education-events/2027-amplify-informatics-conference
+    date: 2026-09-03
+    track: Health informatics
+    no_feed: true
+    note: >-
+      Informatics Summit and Clinical Informatics Conference merge for 2027
+      (Atlanta, Apr 12-15). 11:59 p.m. EDT — NOT AoE, so effectively a day earlier
+      than you might assume. The conflict-of-interest form is due the same day, and
+      AMIA does not extend Amplify.
+
+  - name: ASNR 2027 — Session proposals
+    kind: curated
+    fit:
+      - project: cortseer
+        strength: weak
+        why: >-
+          Proposing a session is an organising act, not a submission of science.
+          Only worth it for visibility.
+    link: https://www.asnr.org/ashnr-asnr-2027-call-for-session-proposals/
+    date: 2026-09-01
+    track: Clinical
+    no_feed: true
+    note: Joint ASHNR/ASNR meeting, San Diego, May 2027. Submitted via Oxford Abstracts.
+
+  - name: ASNR 2027 — Scientific abstracts
+    kind: curated
+    fit:
+      - project: cortseer
+        strength: strong
+        why: >-
+          Direct clinical audience for the FCD work; abstract-level, so the
+          framing question stays deferrable.
+    link: https://www.asnr.org/ashnr-asnr-2027-call-for-session-proposals/
+    date: 2026-11-04
+    approx: true
+    track: Clinical
+    no_feed: true
+    note: >-
+      ASNR's save-the-date says abstracts are accepted September 1 - November 4
+      but omits the year; 2026 is the near-certain reading for a May 2027 meeting.
+      Re-check once the dedicated abstract page goes live around Sept 1.
+
+  - name: IEEE ISBI 2027 — Biomedical Imaging
+    kind: selective
+    fit:
+      - project: cortseer
+        strength: strong
+        why: >-
+          Biomedical imaging main venue and the natural full-paper home for
+          CortSeer.
+      - project: clera
+        strength: moderate
+        why: >-
+          By late October CLERA may have results; ISBI accepts signal work as well
+          as imaging.
+    link: https://biomedicalimaging.org/2027/contributors/papers/
+    date: 2026-10-26
+    track: Medical imaging
+    no_feed: true
+    note: Lausanne, May 25-28 2027. Direct fit for the CortSeer parcellation work.
+
+  - name: ISMRM 2027 — abstract submission (route to the oral)
+    link: https://www.ismrm.org/27m/
+    date: 2026-10-28
+    goal: true
+    kind: curated
+    track: Clinical
+    no_feed: true
+    pin_date: true
+    fit:
+      - project: cortseer
+        strength: strong
+        why: >-
+          MR imaging is CortSeer's home discipline and ISMRM is its flagship
+          meeting — the strongest clinical-imaging venue on the board.
+      - project: clera
+        strength: weak
+        why: ISMRM is MR-specific; EEG work does not fit.
+    note: >-
+      CONFIRMED: "Abstract Submission Deadline: 28 October 2026". Meeting is
+      08-13 May 2027, Vancouver. Acceptance notices go out in FEBRUARY.
+      HOW ORALS ARE ACTUALLY CHOSEN — this is your goal, so it is worth knowing
+      the mechanism rather than just writing a good abstract:
+      (1) YOU MUST REQUEST IT. At submission you "rank your preferred presentation
+      format, including oral presentation" — tables look at "the best-scoring
+      abstracts that requested an oral presentation", so not requesting one filters
+      you out before scores matter.
+      (2) SCORE IS NECESSARY, NOT SUFFICIENT. Assignment happens at the AMPC
+      meeting in January, where ~12 category tables build THEMED sessions: "The
+      responsibility is to make the best oral sessions, not to simply assemble the
+      best-scored abstracts." A high-scoring abstract that fits no theme becomes a
+      poster — they say so outright.
+      (3) THEMATIC FIT AND GROUP DIVERSITY ARE TIEBREAKERS: "We strive to have as
+      many different research groups represented as practically possible in each
+      oral session." Framing your abstract so it obviously belongs in a session
+      someone would build ("Epilepsy", "Lesion Detection") beats framing it as a
+      standalone result.
+      (4) CATEGORY CHOICE PICKS YOUR REVIEWERS — "Selection of the subject category
+      determines the expertise of the reviewers who score the abstract."
+      (5) An oral slot is 9 minutes; scope the work to fit one.
+      Acceptance overall runs 70-80%. Separately, Trainee abstracts scoring in the
+      top 5% or 15% of a category get summa or magna cum laude, awarded on score
+      alone and independent of whether you get a talk.
+
+  # ---- ISMRM workshops: which one is yours? ------------------------------
+  # You have an accepted oral at an ISMRM workshop but did not say which. All
+  # four upcoming ones are below with their own deadlines. The two neuro ones
+  # are the plausible fits for CortSeer. Tell me which and I will delete the rest.
+  #
+  # THREE THINGS TRUE OF EVERY ISMRM WORKSHOP, and different from the Annual
+  # Meeting — do not carry Annual Meeting habits across:
+  #   1. "There is no speaker ready room." You pre-load in the meeting room
+  #      during registration or a break.
+  #   2. "It is not possible to load your presentation once your session has
+  #      begun." There is no 30-minutes-before grace like the Annual Meeting.
+  #   3. Your real upload deadline arrives BY EMAIL — the pages only say
+  #      instructions "will be emailed to all presenters". Watch for it.
+  # Power Pitch slides, if you have one, "CANNOT be submitted on-site."
+  # Bring a USB backup regardless.
+
+  - name: ISMRM Workshop — Translational MR Neuroimaging (Psychiatry & Neurodegeneration)
+    link: https://echo.ismrm.org/program/Psychiatry26
+    date: 2026-08-25
+    kind: curated
+    track: Clinical
+    no_feed: true
+    pin_date: true
+    fit:
+      - project: cortseer
+        strength: strong
+        why: Translational neuroimaging biomarkers — the closest of the four to FCD localization.
+    note: >-
+      25-27 August 2026, Lausanne. IF THIS IS YOURS, ACT NOW: registration is
+      "SOLD OUT" with a waiting list via registrar@ismrm.org, and BOTH the early
+      registration and cancellation deadlines PASSED on 24 July. You should
+      already be registered — confirm you are. Date warning: the ISMRM community
+      calendar wrongly lists 14-16 August; the workshop's own page says 25-27 and
+      its housing text confirms nights of 24-27 August.
+
+  - name: "ISMRM Workshop — White Matter: MR Imaging and Beyond"
+    link: https://echo.ismrm.org/program/WhiteMatter2026
+    date: 2026-09-14
+    kind: curated
+    track: Clinical
+    no_feed: true
+    pin_date: true
+    fit:
+      - project: cortseer
+        strength: strong
+        why: White-matter imaging methodology overlaps the parcellation and lesion-localization work.
+    note: >-
+      Workshop is 14-16 October 2026, Marseille. The date here is the EARLY
+      REGISTRATION and cancellation deadline, 14 September at 23:59 UTC — after it
+      there are no refunds. This is also the ONLY one of the four with a surviving
+      legacy guidelines page stating a DECLARATION SLIDE requirement for orals,
+      but that page is stale and its three template links 404. Since all four
+      workshops are CME-accredited the requirement almost certainly still applies —
+      email the workshop manager for a current template rather than trusting the
+      dead links.
+
+  - name: ISMRM Workshop — Musculoskeletal MRI
+    link: https://echo.ismrm.org/program/MSK2026
+    date: 2026-08-17
+    kind: curated
+    track: Clinical
+    no_feed: true
+    pin_date: true
+    note: >-
+      16-18 September 2026, Boston. Date shown is early registration and
+      cancellation, 17 August. Probably NOT yours — musculoskeletal, no overlap
+      with your work. Accepted orals appear as "Proffered Papers" in 8-minute
+      slots; full program publishes 2 September. Note their extra rule: "You must
+      use the provided computer at the presenter podium... There will be no
+      connection to use your own laptop at the lectern." Slides 16:9, videos
+      embedded not linked, hyperlinks removed.
+
+  - name: ISMRM Workshop — Beyond Protons (X-Nuclei MR)
+    link: https://echo.ismrm.org/program/XNuclei26
+    date: 2026-08-28
+    kind: curated
+    track: Clinical
+    no_feed: true
+    pin_date: true
+    note: >-
+      28 September - 1 October 2026, Barcelona. Date shown is early registration
+      and cancellation, 28 August. Probably NOT yours — X-nuclei spectroscopy.
+
+  - name: ISMRM 2027 workshops — three announced, no dates yet
+    link: https://www.ismrm.org/meetings-workshops/future-ismrm-workshops/
+    kind: curated
+    track: Clinical
+    no_feed: true
+    note: >-
+      Next Generation Contrast Agents; Joint Brain Function & Brain Physiology
+      Study Groups; and Motion Correction in MR. All "More information coming
+      soon" with no dates, location or site. The Brain Function/Physiology one is
+      worth watching for CortSeer. Note ISMRM moved workshop sites to
+      echo.ismrm.org/program/<Name> — the old ismrm.org/workshops/ URLs mostly 404.
+  - name: MoML at MIT 2026
+    kind: curated
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          moml_prism.tex is 4pp, sitting at the 2-4pp limit rather than under it
+          (references and appendices are excluded, verified against the live CFP
+          2026-08-11). Not the closest to done: its preamble had a LoG-2022
+          template pasted over a working one and would not compile at all until
+          2026-08-11, and a "validated to generalize to unseen target domains"
+          claim was removed that its own abstract contradicts with 38% to 0%.
+          Everything accepted is a poster and there are no proceedings, so it
+          conflicts with nothing.
+    link: https://www.moml.mit.edu/submit
+    date: 2026-09-01
+    track: Molecular ML
+    no_feed: true
+    pin_date: true
+    note: >-
+      Short papers, 11:59 PM AoE — the AoE cutoff buys you an extra day over a
+      US-timezone reading. Single track, everything accepted is a poster, event
+      Oct 14 2026. No proceedings, so it does not conflict with submitting the
+      same work elsewhere. Alternate form:
+      https://docs.google.com/forms/d/e/1FAIpQLSdGvuNWZk99TG-7cN1mSt_stpUXu3YJS9mA8-_T0tqtGXCiUg/viewform
+
+  - name: CHI 2027
+    kind: toptier
+    fit:
+      - project: deejai
+        strength: weak
+        why: >-
+          CHI reviews studies, not artifacts. deejai is a working system with no
+          user study, and CHI is roughly a one-in-four venue.
+    link: https://chi2027.acm.org/
+    date: 2026-09-10
+    track: Tier 1
+    match: [CHI]
+    note: >-
+      Tier 1 conference; Google will be there. CHANGE FROM PAST YEARS, verified
+      2026-07-31: "Note that there is no abstract deadline." The separate
+      mandatory abstract/metadata deadline a week early is GONE, so ALL metadata,
+      video and supplementary material must be final by Sept 10 AoE. Submission
+      site opens Aug 13. Revise-and-resubmit: reviews Nov 5, resubmission Dec 3,
+      notification Dec 17. The Student Research Competition is its own Jan 21 row.
+
+  - name: ASPNR — American Society of Pediatric Neuroradiology
+    kind: curated
+    fit:
+      - project: cortseer
+        strength: strong
+        why: >-
+          Pediatric neuroradiology and FCD are the same clinical world. Portal is
+          already open.
+    link: https://aspnr.org/meetings/aspnr-annual-meeting/aspnr2027/
+    date: 2026-09-18
+    track: Clinical
+    no_feed: true
+    probe: true
+
+  - name: ICLR 2027 — abstract registration
+    kind: toptier
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          Registering costs nothing and preserves the option; skipping it forfeits
+          the paper slot.
+    link: https://iclr.cc/Conferences/2027/Dates
+    date: 2026-09-18
+    track: ML main
+    no_feed: true
+    pin_date: true
+    note: >-
+      Hard prerequisite: miss this and you forfeit the paper slot a week later.
+      Anywhere on Earth. Your list had 9/20, which is neither of the real dates.
+
+  - name: ICLR 2027 — full paper
+    kind: toptier
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          The stated eventual target — but your own plan puts the full ICLR
+          submission around 2027 for ICLR 2028, not this cycle.
+      - project: prism
+        strength: moderate
+        why: >-
+          PRISM is scoped as workshop papers, not an ICLR main submission.
+    link: https://iclr.cc/Conferences/2027/CallForPapers
+    date: 2026-09-25
+    track: ML main
+    match: [ICLR]
+    pin_date: true
+    note: >-
+      Anywhere on Earth. Requires the Sept 18 abstract registration first.
+      PINNED: a feed was overwriting this with Sept 18, collapsing the paper
+      deadline onto the abstract deadline and quietly deleting the seven days
+      between them. Sept 25 was re-verified against four official iclr.cc pages
+      on 30 July 2026 — do not unpin without checking there again.
+
+  - name: CVPR
+    kind: toptier
+    fit:
+      - project: cortseer
+        strength: weak
+        why: >-
+          CVPR wants vision methods novelty; CortSeer is an applied clinical
+          pipeline.
+    match: [CVPR]
+    track: ML main
+    note: >-
+      CVPR 2027 pages are still 404 — no official date exists yet. Expect early
+      to mid November 2026; aggregators guessing Nov 6/13/15 disagree with each other.
+
+  - name: ACL 2027 (via ARR January cycle)
+    kind: toptier
+    fit:
+      - project: igbot
+        strength: weak
+        why: >-
+          No NLP paper; revisit if the AITHYRA collaboration produces one.
+    link: https://2027.aclweb.org/
+    track: NLP
+    no_feed: true
+    note: >-
+      Kyoto, Aug 17-22 2027. ARR officially lists the feeding cycle as "January
+      2027" with no day yet, so your 1/5 is the right ballpark but unconfirmed.
+      Possible NLP collaboration with AITHYRA.
+
+  - name: AISTATS
+    kind: toptier
+    fit:
+      - project: biocl
+        strength: weak
+        why: >-
+          AISTATS is statistics and theory led; the empirical continual-learning
+          work is a poor match.
+    match: [AISTATS]
+    track: ML main
+    note: >-
+      Worth correcting: AISTATS closes in early OCTOBER, not January. The last
+      three were Oct 16 2023, Oct 10 2024, Oct 2 2025. The 2027 call is not
+      posted yet, so the date here is projected from that run.
+
+  - name: ICML
+    kind: toptier
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          Same as NeurIPS — the work is workshop-scale today.
+    match: [ICML]
+    track: ML main
+    note: >-
+      ICML 2027 pages are 404; only "2027 — South America" is announced. Beware
+      that searches surface the International Conference on Minority Languages,
+      which also abbreviates to ICML 2027 and is unrelated.
+
+  - name: NeurIPS
+    kind: toptier
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          A main-track NeurIPS paper is a much larger artifact than the current
+          extended abstract.
+    match: [NEURIPS, NIPS]
+    track: ML main
+    note: NeurIPS 2027 is "Europe", no dates published. Historically abstracts land in early May.
+
+  - name: COSYNE
+    kind: selective
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          Cosyne abstracts are competitive and systems-neuro flavoured; Dale
+          constraints fit, CNNs on CIFAR less so.
+    link: https://www.cosyne.org/abstracts-submission
+    track: Neuro
+    no_feed: true
+    probe: true
+    note: >-
+      Split out from a combined COSYNE/CCN row — CCN is tracked separately now.
+      Cosyne 2027 is 11-16 March in Montreal, but no submission timeline is
+      posted. Abstracts historically close in mid-October, so expect ~Oct 2026.
+
+  - name: ICCM — International Conference on Cognitive Modeling
+    kind: selective
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          Cognitive modelling; the developmental schedule is arguably a cognitive
+          model, but the evaluation is ML-style.
+    link: https://mathpsych.org/conference/23/
+    track: Cognitive science
+    no_feed: true
+    probe: true
+
+  - name: RECOMB
+    kind: selective
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          Core computational-biology venue; the mutational-signature work is
+          on-topic, though RECOMB is competitive and archival.
+    link: https://recomb.org/
+    track: Comp bio
+    match: [RECOMB]
+    probe: true
+
+  - name: IEEE EMBC 2027 — Engineering in Medicine and Biology
+    kind: selective
+    fit:
+      - project: clera
+        strength: strong
+        why: >-
+          EMBC takes clinical signal-processing work and by January CLERA should
+          have results.
+      - project: cortseer
+        strength: moderate
+        why: >-
+          Also in scope, though EMBC leans more to signals than imaging.
+    link: https://embc.embs.org/2027/important-dates/
+    date: 2027-01-17
+    track: Bioengineering
+    no_feed: true
+    note: >-
+      This resolves the blank "IEEE EMBS" row. Singapore, Jul 11-15 2027.
+      Contributed papers and workshop/mini-symposium proposals share the Jan 17
+      deadline; 1-page poster papers run later (Feb 21, then Apr 23). The page
+      warns all deadlines "are final and will be strictly observed".
+
+  # ------------------------------------------------- closed, kept for record
+  - name: AIAS
+    kind: workshop
+    fit:
+      - project: igbot
+        strength: moderate
+        why: >-
+          AI and society framing suits the science-communication work, if it were
+          evaluated.
+    link: https://easychair.org/cfp/aias2026
+    date: 2026-06-26
+    track: AI + society
+    no_feed: true
+
+  - name: MLCB
+    kind: workshop
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          Machine learning in computational biology — directly on topic.
+    link: https://www.mlcb.org/submit
+    date: 2026-07-01
+    track: Comp bio
+    no_feed: true
+    probe: true
+
+  - name: IEEE CIBCB
+    kind: selective
+    fit:
+      - project: prism
+        strength: moderate
+        why: >-
+          Computational intelligence in bioinformatics; fits but is a
+          lower-profile venue.
+    link: https://cibcb2026.dib.uth.gr/important-dates/
+    date: 2026-07-01
+    track: Comp bio
+    no_feed: true
+    probe: true
+
+  - name: ISCB Great Plains
+    kind: curated
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          Regional ISCB abstract track; easy route to a talk or poster.
+    link: https://www.iscb.org/greatplains2026/call-for-submissions/abstracts
+    date: 2026-07-22
+    track: Comp bio
+    no_feed: true
+    note: Abstracts track.
+
+  # -------------------------------------------------------------- added for
+  # computational neuroscience and cognitive science
+  - name: CCN 2027 — Cognitive Computational Neuroscience
+    kind: selective
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          CCN is where a developmental account of plasticity loss belongs, and the
+          February timing suits the fuller version.
+      - project: clera
+        strength: moderate
+        why: >-
+          Cognitive-computational framing is a stretch for a clinical localization
+          model.
+    link: https://2027.ccneuro.org/
+    track: Neuro
+    no_feed: true
+    probe: true
+    note: >-
+      The one you asked for. CCN 2027 is Edinburgh, Jul 26-29 2027; the site is
+      live but publishes no deadlines yet and its dates page still 404s. For
+      calibration, CCN 2026 ran 8-page papers Feb 9-12 2026 and 2-page abstracts
+      Apr 2 2026, so expect roughly February 2027. Re-check in the autumn.
+
+  - name: OHBM 2027 — Organization for Human Brain Mapping
+    kind: curated
+    fit:
+      - project: cortseer
+        strength: strong
+        why: >-
+          Human brain mapping is CortSeer's home discipline and the abstract bar
+          is reachable.
+      - project: clera
+        strength: moderate
+        why: >-
+          EEG source localization is in scope if results land by December.
+    link: https://www.humanbrainmapping.org/ohbm-2027/
+    date: 2026-12-15
+    approx: true
+    track: Neuroimaging
+    no_feed: true
+    note: >-
+      Direct fit for the CortSeer parcellation work. The official 2027 timeline
+      gives months only: submission site opens November 2026, content deadline
+      December 2026, notifications February 2027. Meeting is Toronto, Jun 26-30
+      2027. Mid-December is a placeholder for "December" — no day announced.
+
+  - name: CogSci — Cognitive Science Society
+    kind: selective
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          Similar to ICCM — plausible framing, unusual methods for the audience.
+    link: https://cognitivesciencesociety.org/submissions/
+    track: Cognitive science
+    no_feed: true
+    probe: true
+    note: >-
+      No 2027 call yet; the Society's own site lists nothing past CogSci 2026.
+      Submissions historically close in early February of the meeting year.
+
+  - name: Bernstein Conference 2027
+    kind: curated
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          Poster abstracts are reachable and Dale constraints suit a
+          computational-neuro audience.
+      - project: clera
+        strength: moderate
+        why: >-
+          Also plausible if CLERA has results by mid-2027.
+    link: https://bernstein-network.de/en/bernstein-conference/general-information/important-dates-faq/
+    track: Neuro
+    no_feed: true
+    probe: true
+    note: >-
+      2026 cycle fully closed. Next edition is Lausanne, Sept 15-18 2027, with no
+      deadlines posted. Historically contributed talks close late May and posters
+      early July.
+
+  - name: IEEE ICDL — Development and Learning
+    kind: selective
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          Development and learning is precisely the critical-period framing.
+    link: https://icdl2026.org/
+    track: Developmental AI
+    no_feed: true
+    note: >-
+      Overlaps the critical-period continual-learning work. ICDL 2026 (Kyoto,
+      Sept 15-18) is fully past and no 2027 site exists; full papers historically
+      close in March. Careful: WASET-style listings for an "ICDL" in Paris are a
+      different, predatory series — not IEEE ICDL.
+
+  # ------------------------------------------------- continual / lifelong ML
+  - name: CoLLAs — Lifelong Learning Agents
+    kind: selective
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          The dedicated lifelong-learning venue and the right home for the full
+          paper after DevAI.
+    link: https://lifelong-ml.cc/
+    track: Continual learning
+    match: [COLLAS]
+    probe: true
+    note: Closest main venue to the bio-plausible continual-learning project.
+
+  # ---------------------------------------- medical imaging and clinical AI
+  - name: MICCAI 2027
+    kind: selective
+    fit:
+      - project: cortseer
+        strength: strong
+        why: >-
+          The most prestigious fit for the FCD work, and correspondingly the
+          hardest. Needs the top-3 vs top-4 framing resolved first.
+    link: https://miccai.org/upcoming-conferences/
+    match: [MICCAI]
+    track: Medical imaging
+    note: >-
+      Auckland, Sept 26 - Oct 1 2027; the Society page says "Paper submission
+      deadline: To be announced". Ignore the aggregator claiming Feb 26 2027 —
+      that is just MICCAI 2026's date shifted a year, with no official source.
+
+  - name: MIDL 2027 — Medical Imaging with Deep Learning
+    kind: selective
+    fit:
+      - project: cortseer
+        strength: strong
+        why: >-
+          Deep-learning medical imaging, friendlier review than MICCAI, and a
+          December deadline gives time.
+    link: https://2027.midl.io/
+    track: Medical imaging
+    no_feed: true
+    probe: true
+    note: >-
+      Porto, Jul 14-16 2027. Site is live but the call-for-papers page 404s.
+      MIDL 2026 closed Dec 5-10 2025, so expect early December 2026 — worth
+      re-checking around October.
+
+  - name: CHIL 2027 — Health, Inference, and Learning
+    kind: selective
+    fit:
+      - project: clera
+        strength: strong
+        why: >-
+          Health inference and learning is CLERA's exact framing, and February
+          gives real runway.
+    link: https://chil.ahli.cc/submit/call-for-papers/
+    match: [CHIL]
+    track: Health AI
+    note: >-
+      No 2027 page exists yet. CHIL 2025 closed Feb 10 and 2026 closed Feb 4, so
+      expect early February 2027 with submissions opening around December 2026.
+
+  - name: AMIA 2027 Annual Symposium
+    kind: selective
+    fit:
+      - project: cortseer
+        strength: moderate
+        why: >-
+          Clinical informatics framing; possible but not the natural home.
+    link: https://amia.org/education-events/amia-2026-annual-symposium
+    track: Health informatics
+    no_feed: true
+    note: >-
+      Separate from the Amplify conference already on the board. No CFP yet; the
+      2026 symposium's manuscript deadline was March 10 2026, so early March 2027
+      is plausible but unconfirmed. Note amia.org blocks automated fetches, so
+      this one needs a manual check.
+
+  # ------------------------------------------- computational / molecular bio
+  - name: ISMB/ECCB 2027
+    kind: selective
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          ISCB's flagship and a natural home for the PRISM analysis at full
+          length.
+    link: https://www.iscb.org/ismbeccb2027/key-dates
+    track: Comp bio
+    no_feed: true
+    probe: true
+    note: >-
+      Copenhagen, Jul 18-22 2027. The key-dates page is live with section headers
+      but no dates filled in, and warns they are "subject to change without
+      notice". Proceedings deadlines historically fall in Jan-Feb, abstracts Apr-May.
+
+  - name: ACM-BCB — Bioinformatics, Computational Biology and Health Informatics
+    kind: selective
+    fit:
+      - project: prism
+        strength: moderate
+        why: >-
+          Bioinformatics and health informatics; on topic but the 2027 edition is
+          unannounced.
+    link: https://acm-bcb.org/
+    track: Comp bio
+    no_feed: true
+    probe: true
+    note: >-
+      No 2027 edition announced. Deliberately left undated: this venue moved from
+      October (2025, Philadelphia) to late June (2026, Italy), so projecting from
+      history would be misleading. Check the site directly.
+
+  # -------------------------------------------------- general ML, NLP, HCI
+  - name: AAAI-28
+    kind: toptier
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          A full year out; realistic only if the work grows past workshop scale.
+    match: [AAAI]
+    track: ML main
+    note: >-
+      AAAI-27's own deadlines have passed except the alignment special track,
+      which is tracked as its own row. This row projects the next full cycle.
+
+  - name: COLM — Conference on Language Modeling
+    kind: selective
+    fit:
+      - project: igbot
+        strength: weak
+        why: >-
+          Language modelling venue; the pipeline is a tool, not a study.
+    match: [COLM]
+    track: NLP
+    note: >-
+      COLM 2026 is San Francisco, Oct 6-9; its deadlines have passed and the site
+      is being deprecated, so watch for a new domain for 2027.
+
+  - name: EMNLP
+    kind: toptier
+    fit:
+      - project: igbot
+        strength: weak
+        why: >-
+          Closed to new submissions this cycle in any case.
+    match: [EMNLP]
+    track: NLP
+    note: >-
+      New EMNLP 2026 submissions are closed — Aug 2 2026 is only a commitment
+      deadline for papers already reviewed in the ARR May cycle, not a way to
+      submit new work. Go through an ARR cycle instead.
+
+  - name: NAACL
+    kind: toptier
+    fit:
+      - project: igbot
+        strength: weak
+        why: >-
+          Same as ARR — no NLP artifact exists.
+    match: [NAACL]
+    track: NLP
+
+  - name: UAI — Uncertainty in Artificial Intelligence
+    kind: toptier
+    fit:
+      - project: biocl
+        strength: weak
+        why: >-
+          Uncertainty-focused; not the continual-learning story.
+    match: [UAI]
+    track: ML main
+
+  - name: ACM IUI — Intelligent User Interfaces
+    kind: selective
+    fit:
+      - project: deejai
+        strength: moderate
+        why: >-
+          IUI is friendlier to system contributions than CHI, but still expects
+          evaluation.
+    match: [IUI]
+    track: HCI
+
+  - name: ACM FAccT
+    kind: selective
+    fit:
+      - project: igbot
+        strength: moderate
+        why: >-
+          FAccT would take a study of automated science communication, but the
+          pipeline is unevaluated.
+    match: [FACCT]
+    track: AI + society
+
+# ---------------------------------------------------------------------------
+# Awards, fellowships and student prizes. These share the board's timeline with
+# paper deadlines on purpose — a nomination deadline is easier to miss than a
+# submission deadline, and it usually lands earlier.
+#
+# Eligibility is quoted as close to the source as possible. Several of these are
+# gated on being a MEDICAL trainee (resident/fellow/med student) or on holding a
+# paid society membership BEFORE you apply — both are noted per entry.
+awards:
+
+  - name: ASPNR 2027 — Travel Awards (5 separate awards)
+    link: https://aspnr.org/meetings/aspnr-annual-meeting/aspnr2027/
+    date: 2026-09-18
+    kind: student_prize
+    track: Award
+    fit:
+      - project: cortseer
+        strength: strong
+        why: >-
+          Same day as the ASPNR abstract you are already tracking, and the FCD
+          work is squarely pediatric neuroradiology. Apply alongside the abstract.
+    eligibility: >-
+      All five require an accepted abstract. Most are for medical trainees, but the
+      Erin & Darren Schwartz Research Scientist Travel Grant is explicitly for
+      early-career RESEARCH SCIENTISTS WITHOUT AN MD — that is the one to read
+      first. Booth-Johnson is medical students; Silvera/Heist is radiology
+      residents and neuroradiology fellows; Palasis/Philbrook is international
+      trainees from low and lower-middle income countries.
+    award: >-
+      Travel reimbursement, capped by award: up to $3,000 (international), $2,000
+      (Silvera/Heist and Schwartz Research Scientist), $1,000 (Booth-Johnson).
+    note: >-
+      The award application and the abstract share Sept 18 but are SEPARATE
+      submissions — file both. The award is contingent on the abstract being
+      accepted afterwards. 9th Annual Meeting, January 2027, Miami Beach.
+
+  - name: PSB 2027 — Travel Award
+    link: https://psb.stanford.edu/keydates/
+    date: 2026-10-15
+    kind: student_prize
+    track: Award
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          Timing is unusually kind: paper decisions land Sept 8, so you will
+          already know whether the Aug 3 submission was accepted before applying.
+    eligibility: >-
+      No society membership required and an accepted paper is not stated as
+      mandatory, though PSB has historically prioritised presenters. PSB is blunt
+      that "no one is guaranteed travel support".
+    award: Partial travel support only; PSB does not publish amounts.
+    note: >-
+      Applications open Aug 3 2026 and close Oct 15 at 11:59 PM PT, decisions late
+      October. Note the ordering trap: the poster route closes Dec 1, AFTER this
+      travel deadline, so a poster-only attendee must apply for travel first.
+
+  - name: CHI 2027 — Student Research Competition
+    link: https://chi2027.acm.org/authors/student-research-competition/
+    date: 2027-01-21
+    kind: student_prize
+    track: Award
+    fit:
+      - project: deejai
+        strength: moderate
+        why: >-
+          The SRC is a standalone 5-page submission, NOT an add-on to an accepted
+          paper — so deejai can enter without the full user study a CHI paper needs.
+      - project: clera
+        strength: weak
+        why: Eligible in principle, but CHI's audience is interaction, not clinical signal processing.
+    eligibility: >-
+      Must be enrolled at the time of the submission deadline. UNDERGRADUATES may
+      submit individually OR as a team; graduate students must be sole authors.
+      Advisors cannot be co-authors. ACM student membership required only if
+      selected. Proof of student status required. In-person attendance required.
+    award: >-
+      Poster slot at CHI 2027, then $500 / $300 / $200 for the top three in each of
+      the undergraduate and graduate categories, plus a medal, a year of ACM student
+      membership, and first place advances to the ACM SRC Grand Finals.
+    note: >-
+      This confirms the separate January deadline on your original list. Wholly
+      independent of the CHI Papers deadline: submit Jan 21, notified Feb 18,
+      publication-ready Mar 18. Travel is not included — CHI runs a separate Gary
+      Marsden Travel Award.
+
+  - name: RSNA 2026 — Trainee Research Prize
+    link: https://www.rsna.org/annual-meeting/awards-recognition/trainee-research-prize
+    date: 2026-08-05
+    kind: student_prize
+    track: Award
+    fit:
+      - project: cortseer
+        strength: moderate
+        why: >-
+          Rides on the Aug 5 Cutting-Edge Research abstract you are already
+          considering — no extra submission. The gate is status, not effort.
+    eligibility: >-
+      CHECK THIS BEFORE COUNTING ON IT: open to "residents, fellows, medical
+      students or physics trainees" who are RSNA Members-in-Training. An
+      undergraduate or a PhD student outside medical physics likely does NOT
+      qualify. Membership must be in place when you submit.
+    award: $1,000 per subspecialty, winners published in Radiology. No travel component.
+    note: >-
+      No separate application — judged from the abstract as presented. Its only
+      cost is the RSNA membership, since the abstract is already being written.
+
+  - name: OHBM 2027 — Merit Abstract Award / Travel Stipend
+    link: https://humanbrainmapping.org/MeritAward/
+    date: 2026-12-15
+    approx: true
+    kind: student_prize
+    track: Award
+    fit:
+      - project: cortseer
+        strength: strong
+        why: Merit award is decided on peer-review score, and the FCD results are strong.
+      - project: clera
+        strength: moderate
+        why: Only if EEG localization results exist by December.
+    eligibility: >-
+      Trainees. Merit Award goes to the highest-scoring trainee abstracts; the
+      Travel Stipend is for trainees in countries recognised as economically
+      disadvantaged. You may apply for both but can accept only one. A $40
+      non-refundable submission fee applies, and the abstract must describe
+      COMPLETED work — planned work is rejected.
+    award: Stipends toward travel and attendance; OHBM does not publish the amounts.
+    note: >-
+      IMPORTANT — there is no separate portal. The application lives INSIDE the
+      abstract submission form, so if you do not tick the award option when
+      submitting you cannot apply later. Date is approximate: OHBM has announced
+      only "December 2026"; the 2026 cycle closed Dec 15.
+
+  - name: ASNR 2027 — Member-in-Training Travel Award
+    link: https://www.asnr.org/about-us/awards/asnr-member-in-training-travel-awards/
+    date: 2026-11-04
+    approx: true
+    kind: student_prize
+    track: Award
+    fit:
+      - project: cortseer
+        strength: moderate
+        why: Rides on the ASNR scientific abstract already on the board.
+    eligibility: >-
+      ASNR Members-in-Training only — "medical students, graduate students,
+      residents, or fellows", so graduate students DO qualify here (unlike the
+      RSNA prize). Must submit a Scientific ORAL abstract; posters and educational
+      exhibits do not qualify.
+    award: Ten awards, each waiving in-person registration plus $1,000 toward travel.
+    note: >-
+      No separate form — the top-ranked oral abstracts are simply notified. Date
+      tracks the ASNR abstract deadline, which is not yet posted for 2027; early
+      November is the recurring pattern.
+
+  - name: NeurIPS 2026 — Financial Assistance
+    link: https://neurips.cc/Conferences/2026/FinancialAssistance
+    date: 2026-10-02
+    approx: true
+    kind: student_prize
+    track: Award
+    fit:
+      - project: prism
+        strength: moderate
+        why: >-
+          Workshop authors qualify, and PRISM is targeting several NeurIPS 2026
+          workshops. Worth applying once workshop notifications land Sept 29.
+      - project: biocl
+        strength: moderate
+        why: Same route via DevAI.
+    eligibility: >-
+      Prioritises student and junior-postdoc conference authors, but an accepted
+      paper is not strictly required — accessibility needs, financial hardship and
+      first-time attendance also count. No membership needed.
+    award: >-
+      Registration and/or prepaid hotel ONLY. Despite the usual "travel award"
+      label, NeurIPS explicitly does not fund flights or per diem.
+    note: >-
+      The 2026 page still says it has not been updated. Date is last year's (Oct 2
+      AoE) as a placeholder — expect the real window to open just after author
+      notifications on Sept 29 2026.
+
+  - name: ICLR 2027 — Financial Assistance
+    link: https://iclr.cc/Conferences/2027/Dates
+    date: 2027-03-01
+    approx: true
+    kind: student_prize
+    track: Award
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          Reviewing counts as a qualifying contribution, so this is reachable even
+          without an accepted ICLR paper.
+    eligibility: >-
+      Student and early-career contributors — authors, workshop and tiny-paper
+      authors, and REVIEWERS all qualify. No accepted paper strictly required;
+      ICLR says "if in doubt about your eligibility, please just apply."
+    award: >-
+      Unlike NeurIPS, ICLR does reimburse real travel: registration plus up to 6
+      nights hotel, or monetary reimbursement for flights, visa fees and lodging
+      instead. Roughly $1,500-$1,745 at the top student tier.
+    note: >-
+      ICLR 2027 has announced neither location nor dates, so this is last cycle's
+      March 1 date as a placeholder. The 2026 deadline fell after paper decisions.
+
+  - name: ISCB Conference Fellowship (ISMB 2027)
+    link: https://www.iscb.org/ismb2026/general-info/conference-fellowships
+    kind: student_prize
+    track: Award
+    fit:
+      - project: prism
+        strength: moderate
+        why: The route to funded attendance at ISMB, if a PRISM abstract is accepted there.
+    eligibility: >-
+      Strictest gate on this list. You must ALREADY be a paid ISCB member (pending
+      memberships are rejected), be enrolled as an undergraduate, graduate or
+      postdoc, and be the PRESENTING author on an ACCEPTED paper, abstract or
+      poster. You must also be able to pay everything up front.
+    award: >-
+      Partial reimbursement of registration, transport, hotel and up to $250 of
+      meals. Regional caps roughly $500-$1,500. ISCB warns it covers only about
+      half of real costs.
+    note: >-
+      Invitation-only: ISCB emails a single-use application URL to presenting
+      authors after acceptances go out. You cannot apply cold. ISMB 2027 dates are
+      not yet announced, so no date here yet — historically the fellowship closes
+      mid-to-late May.
+
+  # ---- Fellowships and scholarships -------------------------------------
+  # TWO FACTS GATE MOST OF THESE and I do not have them: your citizenship /
+  # residency, and your academic year in autumn 2026. Each entry states its gate
+  # verbatim so you can filter. Where an award needs institutional nomination the
+  # campus deadline is the one that binds, and it runs weeks to months earlier.
+
+  - name: Schwarzman Scholars (2027 cohort)
+    link: https://www.schwarzmanscholars.org/admissions/
+    date: 2026-09-09
+    kind: fellowship
+    track: Fellowship
+    eligibility: >-
+      No citizenship restriction. Ages 18-28 as of Aug 1 2027, undergraduate degree
+      completed before Aug 1 2027, English proficiency. No nomination needed.
+    award: Fully funded one-year Master's in Global Affairs at Tsinghua, Beijing.
+    note: >-
+      EARLIEST fellowship deadline on the board — 3 p.m. EDT, about six weeks out.
+      Worth a deliberate decision rather than drift: this is a global-affairs
+      master's, so it competes with starting a PhD rather than feeding into one.
+      The odd one out for a lab-track computational scientist.
+
+  - name: Marshall Scholarship (2027)
+    link: https://www.marshallscholarship.org/apply/
+    date: 2026-09-29
+    kind: fellowship
+    track: Fellowship
+    nomination: true
+    eligibility: >-
+      US citizens only, bachelor's from an accredited four-year US institution,
+      minimum GPA 3.7, degree awarded within a recent window. Must be endorsed by
+      your institution's President, Provost or Academic Dean.
+    award: Two years of postgraduate study at any UK institution, any field.
+    note: >-
+      Applicant deadline Sept 29 5 p.m., institutional endorsement Oct 1. The
+      campus committee that decides whom to endorse meets WELL before that — if
+      you have not contacted the fellowships office by early August you are behind.
+      Source caveat: marshallscholarship.org timed out on fetch, so verify in a
+      browser and download the 2027 Rules PDF for exact GPA and degree timing.
+
+  - name: Knight-Hennessy Scholars (2027 cohort)
+    link: https://knight-hennessy.stanford.edu/admission/before-you-apply/dates-and-deadlines
+    date: 2026-10-06
+    kind: fellowship
+    track: Fellowship
+    eligibility: >-
+      ALL citizenships. Must separately apply to and enrol in a full-time Stanford
+      graduate program. First bachelor's earned January 2020 or later for the 2027
+      intake. No nomination.
+    award: Up to three years of funding for any Stanford graduate degree, plus a leadership program.
+    note: >-
+      TWO deadlines, and the second is easy to miss: KHS itself closes Oct 6 at
+      1 p.m. PT, but your Stanford degree-program application must also be in by
+      Dec 1 2026 to stay eligible. Source caveat: the Stanford page returns 403 to
+      automated fetching, so confirm the time in a browser.
+
+  - name: Fulbright US Student Program (2027-28)
+    link: https://us.fulbrightonline.org/applicants/getting-started
+    date: 2026-10-06
+    kind: fellowship
+    track: Fellowship
+    nomination: true
+    eligibility: >-
+      US citizens holding a bachelor's by the award start. Currently enrolled
+      students MUST apply through their campus Fulbright Program Adviser and
+      cannot bypass the campus committee; alumni apply At-Large directly.
+    award: Funded study, research or teaching abroad for one academic year; country varies.
+    note: >-
+      National deadline Oct 6 5 p.m. ET, but the campus deadline is typically 4-6
+      weeks earlier — late August or early September 2026. Country requirements
+      differ and some need extra in-country steps, so pick the country early.
+
+  - name: Rhodes Scholarship (US constituency, 2027)
+    link: https://www.rhodeshouse.ox.ac.uk/scholarships/applications/united-states/
+    date: 2026-10-07
+    kind: fellowship
+    track: Fellowship
+    nomination: true
+    eligibility: >-
+      US citizens meeting the residency criteria in the official Information for
+      Candidates PDF, bachelor's before taking up the award, with age limits
+      (traditionally 18-23 at Oct 1, extended for later first degrees). Requires a
+      letter of institutional endorsement.
+    award: Fully funded postgraduate study at Oxford, two to three years.
+    note: >-
+      The endorsement is technically due the same day, but nearly every US
+      university runs its own competitive selection first, commonly closing late
+      August to mid-September. Treat the campus process as the real deadline.
+
+  - name: Gates Cambridge Scholarship (US round)
+    link: https://www.gatescambridge.org/apply/timeline/
+    date: 2026-10-14
+    kind: fellowship
+    track: Fellowship
+    eligibility: >-
+      Citizens of any country outside the UK. Funds a PhD, MLitt or one-year
+      postgraduate course at Cambridge — undergraduate degrees, MASt and MBA are
+      ineligible. No nomination, but the Cambridge admissions application must be
+      complete by the same date with Gates selected as a funding source.
+    award: Full cost of a Cambridge degree plus maintenance.
+    note: >-
+      Round depends on where you live, not just citizenship: US citizens resident
+      in the USA face Oct 14 2026, roughly two months earlier than everyone else
+      (Dec 8 2026 or Jan 6 2027). A US citizen living abroad falls in the later
+      round. The Cambridge application is the real work — start in August.
+
+  - name: CRA Outstanding Undergraduate Researcher Award (2026-27)
+    link: https://cra.org/crae/awards/cra-outstanding-undergraduate-researchers/
+    date: 2026-10-14
+    kind: student_prize
+    track: Award
+    nomination: true
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          The flagship undergraduate research prize in computing, and PRISM is a
+          substantial independent research record with drafted papers.
+      - project: biocl
+        strength: strong
+        why: A second independent line of work strengthens exactly what this award rewards.
+    eligibility: >-
+      Undergraduates enrolled at North American institutions in Fall 2026 who have
+      not yet received a bachelor's. NO citizenship requirement, and NOT restricted
+      to CS majors — computational biology and ML count.
+    award: Recognition as the top undergraduate researcher in computing; finalist and honourable-mention tiers.
+    note: >-
+      PROBABLY THE HIGHEST-VALUE ITEM HERE, and you cannot self-nominate. The
+      department chair submits, and departments granting computing PhDs may put
+      forward only FOUR students a year — so the real contest is internal and runs
+      in September. Approach the department in August. Hard cutoff 9 p.m. ET Oct 14.
+
+  - name: Paul & Daisy Soros Fellowship for New Americans (2027)
+    link: https://www.pdsoros.org/apply
+    date: 2026-10-29
+    kind: fellowship
+    track: Fellowship
+    eligibility: >-
+      Immigrants or children of immigrants — naturalized citizen, green-card
+      holder, refugee, asylee, DACA recipient, or born abroad and schooled in the
+      US; children of immigrants qualify if both parents were born abroad as
+      non-citizens and at least one naturalized. Age 30 or under at the deadline.
+      Cannot have started a third year of graduate study. No nomination.
+    award: Up to $90,000 toward a US graduate or professional degree in any field.
+    note: >-
+      More forgiving than most: no campus gate, no attempt limit, free to apply,
+      and a second-year PhD student is still eligible where NSF GRFP and DOE CSGF
+      would not be. Take the official eligibility quiz rather than self-assessing
+      the immigration categories.
+
+  - name: NDSEG Fellowship (FY2027)
+    link: https://ndseg.sysplus.com/
+    date: 2026-10-30
+    kind: fellowship
+    track: Fellowship
+    eligibility: >-
+      US citizens, US dual citizens or US nationals ONLY — PERMANENT RESIDENTS ARE
+      INELIGIBLE, which is stricter than NSF GRFP, Hertz and DOE CSGF. Bachelor's
+      received or expected in the application year, at or near the start of doctoral
+      study, with at least three years remaining. Research must map to a DoD Broad
+      Agency Announcement topic.
+    award: Three years of full tuition plus a stipend.
+    note: >-
+      Portal opens Aug 3 2026 and closes Oct 30 at 5 p.m. ET. ML and computational
+      neuroscience map cleanly onto DoD topics; pure computational biology needs a
+      deliberate defence-relevance framing.
+
+  - name: Hertz Foundation Fellowship (2027)
+    link: https://www.hertzfoundation.org/hertz-fellowship/apply/
+    date: 2026-10-31
+    approx: true
+    kind: fellowship
+    track: Fellowship
+    eligibility: >-
+      US citizens or permanent residents pursuing a full-time PhD in applied
+      physical or biological sciences, mathematics or engineering at a US
+      institution. College seniors, first-year graduate students, or those in a gap
+      year. No nomination.
+    award: Up to five years of funding, widely considered the most prestigious US PhD fellowship.
+    note: >-
+      DATE IS APPROXIMATE — the official timeline says only "Late October 2026"
+      (references due November). Last cycle closed Oct 31. Applications open late
+      August, so the portal should be live within weeks.
+
+  - name: NSF Graduate Research Fellowship (FY2027)
+    link: https://www.nsfgrfp.org/
+    date: 2026-11-10
+    approx: true
+    kind: fellowship
+    track: Fellowship
+    eligibility: >-
+      US citizens, nationals or permanent residents. Undergraduate seniors;
+      bachelor's holders with no prior graduate enrolment; or first-year graduate
+      students with under one year completed. Seniors and non-enrolled applicants
+      may apply an unlimited number of times; graduate students get ONE attempt.
+    award: Three years of support, stipend plus tuition allowance.
+    note: >-
+      DATE IS APPROXIMATE AND FIELD-DEPENDENT — the FY2027 solicitation is not yet
+      posted. Historically Life Sciences goes first (Nov 10 2025) with Computer and
+      Information Science about two days later (Nov 12 2025). As a computational
+      biologist you may genuinely choose your panel, and that choice changes your
+      date. Expect the solicitation late September 2026.
+
+  - name: Churchill Scholarship (2027-28)
+    link: https://www.churchillscholarship.org/the-scholarship
+    date: 2026-11-02
+    kind: fellowship
+    track: Fellowship
+    nomination: true
+    eligibility: >-
+      US citizens enrolled at one of roughly 120 PARTICIPATING INSTITUTIONS —
+      a hard gate: if your school is not on the list you cannot apply at all.
+      Graduating in the deadline's academic year or within the past 12 months.
+      Funds a one-year master's at Cambridge in science, maths or engineering.
+    award: One year at Churchill College, Cambridge, fully funded.
+    note: >-
+      Foundation deadline Nov 2 5 p.m. ET, campus nomination some weeks earlier,
+      and each school may nominate only a small fixed number. Note the double
+      timing trap: apply to Cambridge itself by the second Wednesday in October,
+      three weeks BEFORE the Churchill deadline, because Cambridge admits rolling.
+
+  - name: DOE Computational Science Graduate Fellowship (2027-28)
+    link: https://www.krellinst.org/csgf/how-apply
+    date: 2027-01-15
+    approx: true
+    kind: fellowship
+    track: Fellowship
+    eligibility: >-
+      US citizens or lawful permanent residents. Undergraduate seniors, current
+      master's students moving institutions, first-year graduate students, or those
+      matriculating. SECOND-YEAR AND BEYOND GRADUATE STUDENTS ARE INELIGIBLE.
+      MD/PhD and other concurrent professional doctorates excluded.
+    award: Four years of funding plus a required practicum at a DOE national laboratory.
+    note: >-
+      DATE IS APPROXIMATE — Krell says only that the application appears late
+      October 2026; recent cycles closed around Jan 15. Strong structural fit for
+      computational biology, but note the mandatory practicum and a program-of-study
+      requirement spanning maths, CS and a science domain.
+
+  - name: Goldwater Scholarship (2027)
+    link: https://goldwaterscholarship.gov/important-dates/
+    date: 2027-01-29
+    kind: student_prize
+    track: Award
+    nomination: true
+    fit:
+      - project: prism
+        strength: strong
+        why: Goldwater rewards a demonstrated research trajectory, which PRISM plus biocl clearly establishes.
+    eligibility: >-
+      US citizens, nationals or permanent residents who are currently SOPHOMORES OR
+      JUNIORS in a STEM field intending a research career. Seniors are not eligible.
+    award: Up to $7,500 per year toward tuition; the premier US undergraduate STEM scholarship.
+    note: >-
+      National deadline is the last Friday in January (Jan 29 2027), 5 p.m. Central,
+      but the campus process is what matters: institutions may nominate only FOUR
+      sophomores/juniors, internal competitions open around September, and campus
+      deadlines across peer schools run Dec 1 to late January. Contact the
+      fellowships office in September.
+
+  - name: Amgen Scholars (US, Summer 2027)
+    link: https://amgenscholars.com/us-program/
+    date: 2027-02-01
+    approx: true
+    kind: student_prize
+    track: Award
+    fit:
+      - project: prism
+        strength: moderate
+        why: A funded summer research placement rather than a publication venue, but the best-matched program of its kind.
+    eligibility: >-
+      US citizens or permanent residents (several sites also accept DACA), GPA 3.2+,
+      sophomores, juniors or non-graduating seniors intending a PhD or MD-PhD. No
+      nomination — but each host site has its OWN application; there is no central form.
+    award: Funded summer research placement at a major US host institution.
+    note: >-
+      DATE IS APPROXIMATE — applications open Nov 1 2026, closing date unannounced;
+      the 2026 cycle closed Feb 1. IMPORTANT CATCH: these are visiting-student
+      programs, and Caltech's own page redirects its undergraduates elsewhere, so
+      target non-Caltech sites. Having done a Stanford SURF does not bar you.
+
+  - name: Google Student Researcher (BS/MS)
+    link: https://research.google/programs-and-events/student-engagement/
+    kind: student_prize
+    track: Award
+    fit:
+      - project: prism
+        strength: moderate
+        why: One of very few research-track industry programs actually open at the bachelor's level.
+    eligibility: >-
+      Undergraduates CAN apply via the dedicated "Student Researcher, BS/MS"
+      postings — unlike every industry PhD fellowship, which are doctoral-only.
+      Requires full-time enrolment with return afterwards, and for US roles,
+      attendance at a US degree program.
+    award: Paid research placement working with Google researchers.
+    note: >-
+      ROLLING — no single deadline, so no date here. Openings post continuously by
+      season, typically four to six months ahead. Set a Google Careers alert rather
+      than waiting for a date. Note the separate "Research Internship" track is
+      final-year-PhD only.
+
+  # ---- Research internships ---------------------------------------------
+  # Most big-lab "research internships" are PhD-only; the undergraduate-eligible
+  # ones are called out explicitly. Several run ROLLING with no deadline, where
+  # applying early is the whole game — those carry no date and say so.
+
+  - name: Microsoft Research URIC — Undergraduate Research Internship in Computing
+    link: https://www.microsoft.com/en-us/research/academic-program/undergraduate-research-internship-computing/
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          The best-matched big-lab internship for an undergraduate on this whole
+          board — purpose-built for undergrads rather than tolerating them.
+    eligibility: >-
+      "Rising junior or rising senior students enrolled in a bachelor's degree
+      program majoring in computer science, computer engineering, software
+      engineering, information science or related major", plus two years of
+      programming and coursework in calculus and probability/statistics or ML.
+    award: 12-week paid summer internship. Redmond, New York City or New England.
+    note: >-
+      ACTION — CHECK THIS URL WEEKLY FROM AUGUST. The page still says "Applications
+      for Summer 2026 are now closed" and has not been updated for 2027. Historically
+      a HARD deadline, not rolling, and it wants two reference letters plus a cover
+      letter and research samples, so the letters need lining up in advance.
+      Microsoft Research is also unusually visa-friendly: "We'll also help with visa
+      applications where needed."
+
+  - name: Google / DeepMind — Student Researcher (BS/MS)
+    link: https://research.google/programs-and-events/student-engagement/
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: strong
+        why: Google Research and DeepMind share one funnel, and both do protein/bio ML.
+      - project: biocl
+        strength: moderate
+        why: DeepMind's neuroscience-adjacent teams are reachable through the same application.
+    eligibility: >-
+      Explicitly undergraduate-eligible: "We welcome applications from BS/MS/PhD
+      students, or pre-academic researchers intending to join a MS or PhD program."
+      DeepMind's page agrees — "You must be enrolled in a Bachelor's, Master's, or
+      PhD program." In-person at a Google office.
+    award: Paid research placement working directly with a host research team.
+    note: >-
+      ROLLING, so no date — postings appear continuously and close early once
+      projects fill ("may close earlier if all available projects are full").
+      ONE APPLICATION COVERS BOTH: "we'll consider you for all relevant positions
+      across Google's AI teams", so do not double-apply to DeepMind separately.
+      Set a Google Careers alert for "Student Researcher BS/MS" now.
+
+  - name: Apple — Machine Learning and AI Undergrad Internships
+    link: https://machinelearning.apple.com/work-with-us
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: moderate
+        why: Apple AIML is one of very few research orgs with an explicitly undergrad-labelled req.
+    eligibility: >-
+      Apple's student page requires being "enrolled full-time and pursuing a
+      bachelor's degree, master's degree, or doctorate" — undergraduates included
+      at company level, and there is a dedicated req titled "Machine Learning and
+      Artificial Intelligence Undergrad Internships".
+    award: Paid internship inside the AIML research organisation.
+    note: >-
+      ROLLING — Apple posts continuously rather than in one annual window, so check
+      jobs.apple.com directly. Caveat: the individual postings are JavaScript-rendered
+      and could not be read, so the undergrad req's qualifications are unverified —
+      the title is confirmed but read the requirements yourself. Note "Apple Scholars
+      in AIML" is a separate PhD-only fellowship, not this.
+
+  - name: NVIDIA — university internships (NOT NVIDIA Research)
+    link: https://www.nvidia.com/en-us/research/internships/
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: weak
+        why: NVIDIA does bio/healthcare AI, but the research track proper is closed to undergrads.
+    eligibility: >-
+      IMPORTANT SPLIT: NVIDIA RESEARCH's "PhD Research Intern" roles are PhD-only.
+      But NVIDIA's general university program takes "BS, MS, PhD, or MBA" students
+      year-round, and its "Ignite" program is specifically "created to give current
+      freshmen and sophomores" early opportunity. Apply to those, not to Research.
+    award: Paid internship, minimum 12 weeks.
+    note: >-
+      No dates published anywhere on the official pages, and jobs.nvidia.com is a
+      JavaScript portal that could not be read. Treat as rolling and check directly.
+
+  - name: Anthropic Fellows Program — next cohort
+    link: https://alignment.anthropic.com/2025/anthropic-fellows-program-2026/
+    kind: internship
+    track: Internship
+    eligibility: >-
+      No degree requirement at all — "You don't need a PhD, prior ML experience, or
+      published papers." The binding constraint is availability: four months
+      FULL-TIME, which an enrolled student cannot usually do without a leave. Hard
+      blocker for many: "You need to have or independently obtain full-time work
+      authorization in the UK, the US, or Canada" and "We are not currently able to
+      sponsor visas for fellows."
+    award: Paid four-month full-time AI-safety research fellowship.
+    note: >-
+      The current cohort CLOSED July 26 2026, four days ago, so no date here.
+      Cohorts run every few months — worth watching, but note two mismatches: it is
+      AI-safety specifically (a poor topical fit for comp bio or neuro), and it
+      needs a full-time leave. Anthropic otherwise states plainly: "We don't
+      currently offer internships."
+
+  - name: PhD-only research internships — tracked so you can skip them
+    link: https://research.adobe.com/careers/internships/
+    kind: internship
+    track: Internship
+    eligibility: >-
+      NOT open to undergraduates, verified on official pages. Meta/FAIR intern reqs
+      are all suffixed "(PhD)". Amazon Applied Science requires "a PhD or Master's
+      degree". Adobe Research says internships are "open to applicants pursuing PhD
+      and Master's degrees". NVIDIA Research and Apple Scholars are PhD-only.
+      Microsoft's "Research Intern" track is the PhD sibling of URIC.
+    award: n/a
+    note: >-
+      Recorded deliberately so these do not get re-researched every cycle. Revisit
+      once you are in a PhD program. Three could not be verified at all because the
+      sites block automated access — IBM Research (403), OpenAI (403 site-wide) and
+      Salesforce (403 / TLS failure) — so those need a manual browser visit if you
+      want them ruled in or out.
+
+  # ---- AI safety / alignment research programs ---------------------------
+  # Your stated goal is MATS. Most of this family is FULL-TIME and IN-PERSON,
+  # which collides with being enrolled — that constraint, not competitiveness,
+  # is what rules most of them out in the near term.
+
+  - name: MARS — Mentorship for Alignment Research Students (Cambridge AI Safety Hub)
+    link: https://caish.org/mars
+    kind: internship
+    track: AI safety
+    no_feed: true
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          Interpretability is explicitly in scope, and mentors come from Redwood,
+          IAPS and Google DeepMind — the same orbit as your MATS goal.
+    eligibility: >-
+      "University students and early-career researchers with an interest in AI
+      safety" — undergraduates are the named target, not an exception. No
+      citizenship or residency requirement stated. Typical backgrounds are ML, CS,
+      maths, physics or governance, but the page says these are "not requirements".
+    award: >-
+      UNPAID, but costs covered: "CAISH covers all costs related to participation:
+      travel and accommodation for the in-person week, meals, office space, compute
+      ($2k+), Claude Max for technical streams, and research management support."
+    note: >-
+      NO DATE YET — the July-October 2026 cohort closed 3-10 May. "The next cohort
+      runs in December 2026" with only an Expression of Interest form live, so fill
+      that in; it is the only action available.
+      TWO CORRECTIONS worth knowing, because they change whether this is even
+      feasible: it is PART-TIME AND HYBRID, roughly 8-15+ hours a week with a
+      single in-person sprint week — so unlike MATS it does NOT need a leave of
+      absence. And despite the Cambridge name, MARS V's sprint week was held in
+      OXFORD; the current page names no city at all. Scope is technical AI safety
+      (control, interpretability, evals, oversight) and AI governance — no
+      biosecurity or neuro stream, so PRISM and CLERA do not fit here.
+
+  - name: Cambridge ERA:AI Fellowship
+    link: https://erafellowship.org/fellowship
+    kind: internship
+    track: AI safety
+    no_feed: true
+    fit:
+      - project: biocl
+        strength: moderate
+        why: Technical AI safety stream; the continual-learning work is the closest of your projects.
+    eligibility: >-
+      Unusually open: "Anyone! We are a talent-first programme", minimum age 18, no
+      degree-level restriction, and visa support is offered — so undergraduates and
+      non-UK nationals both qualify.
+    award: >-
+      PAID, and well: "Fellows receive a salary equivalent to GBP 34,125 per year,
+      which will be prorated to the duration of the Fellowship", plus complimentary
+      accommodation, meals during work hours, visa support and travel.
+    note: >-
+      Added alongside MARS because it is the OTHER Cambridge AI-safety fellowship
+      and the better fit if what you actually want is full-time, paid and genuinely
+      in Cambridge UK. "Applications for our Summer 2026 Fellowship have now
+      closed" (they closed 12 April 2026); no 2027 cycle posted, so no date here —
+      expect roughly April. CONFLICT WARNING: this one IS full-time and in-person
+      in Cambridge for 10 weeks starting early July, so it collides with anything
+      else that summer in a way MARS does not.
+  - name: SPAR — Supervised Program for Alignment Research (Fall 2026)
+    link: https://sparai.org/
+    date: 2026-08-18
+    kind: internship
+    track: AI safety
+    pin_date: true
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          SPAR's research areas include BIOSECURITY and it names biology as a
+          welcomed background — the one program in this family where your
+          computational-biology profile is a project category, not just a credential.
+      - project: biocl
+        strength: moderate
+        why: Interpretability and safety projects overlap the failure-modes framing you already use.
+    eligibility: >-
+      Explicitly open to undergraduates: "The program is open to undergraduate,
+      graduate/PhD students, and professionals of different experience levels."
+      No prior research required. Fully remote, so no citizenship or location gate.
+    award: >-
+      Three-month remote research fellowship, Sept 14 - Dec 14, ending in a Demo
+      Day with METR, Redwood, GovAI and MATS. UNPAID — project expenses and compute
+      only, no personal stipend.
+    note: >-
+      APPLY. Re-verified 2026-07-31: "July 28 - August 18: Mentee application
+      period", unchanged, no time of day published. Closes Aug 18, and it is the
+      only program in this family open right
+      now. Crucially it is PART-TIME and remote — "Commit 5-40 hours/week... SPAR
+      is designed to fit well alongside other commitments" — so unlike MATS it does
+      not require a leave of absence. MATS is named among the Demo Day
+      organisations, which makes this the natural stepping stone toward your stated
+      MATS goal rather than a detour.
+
+  - name: MATS — next scholar cohort (Winter/Summer 2027)
+    link: https://www.matsprogram.org/
+    kind: internship
+    track: AI safety
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          MATS accepts the background but not the topic — selection needs "strong
+          motivation to contribute to AI safety", so your neuro/bio work counts as a
+          credential rather than as the research you would do there.
+    eligibility: >-
+      Undergraduates explicitly welcome — "Undergraduates with strong research
+      potential" — and both US and non-US citizens, with J1 visas provided and a
+      London office as fallback. Only hard bar is being 18+ at program start.
+      Highly competitive at roughly 4-7% acceptance.
+    award: >-
+      10 weeks in Berkeley or London, $1,250/week plus travel, housing and meals;
+      empirical streams get ~$2k/week compute. Optional funded 6-12 month extension,
+      which about 80 percent of applicants receive.
+    note: >-
+      NO DATE YET — Autumn 2026 closed June 7 and no next scholar window is posted;
+      mentor recruiting for Winter and Summer 2027 is open, which implies scholar
+      rounds will follow. Watch from late summer, since Autumn opened about 4.5
+      months before its start. THE REAL OBSTACLE IS THE CALENDAR, not selectivity:
+      40 hours a week for 10 weeks running Sept 28 - Dec 4 sits inside a semester
+      and needs a leave. One escape hatch: the commitment "can be reduced to 20
+      hours per week on a case-by-case review", though not for J1 holders unless
+      remote or in London.
+
+  - name: CHAI Internship (UC Berkeley) — 2027 cycle
+    link: https://humancompatible.ai/jobs
+    date: 2026-09-15
+    approx: true
+    kind: internship
+    track: AI safety
+    fit:
+      - project: biocl
+        strength: moderate
+        why: >-
+          An academic lab that produces first-author workshop papers — the output
+          model matches your publication-oriented trajectory better than a bootcamp.
+    eligibility: >-
+      Undergraduates named explicitly, and "We accept international applicants."
+      Research experience "strongly advantageous but not required."
+    award: >-
+      12-16 weeks, PAID — $5,000/month in person at UC Berkeley or $3,500/month
+      remote. "Typically... over the summer, but dates are flexible throughout the year."
+    note: >-
+      DATE IS INFERRED, NOT PUBLISHED. The 2026 round is closed and no 2027 date is
+      posted, but its published phase schedule (Phase 1 responses mid-October)
+      implies applications opened around September. Check the page in September.
+      Best of this family for staying enrolled: paid, remote option, flexible dates,
+      undergrads and international applicants both accepted.
+
+  - name: Constellation Astra Fellowship — next cohort
+    link: https://constellation.org/programs/astra
+    kind: internship
+    track: AI safety
+    eligibility: >-
+      No stated bar on undergraduates, but the framing targets career-changers
+      wanting to "transition into a full-time AI safety role or start your own AI
+      safety focused organization". Visa support offered.
+    award: Five months in Berkeley, $8,400/month plus ~$15k/month compute for empirical fellows.
+    note: >-
+      Closed; the site's hint about a cohort "possibly as soon as Summer 2026" is
+      now stale with nothing newer posted, so the expression-of-interest form is the
+      only move. Full-time in-person for five months — needs a leave of absence.
+
+  - name: ARENA — next iteration (10.0)
+    link: https://www.arena.education/
+    kind: internship
+    track: AI safety
+    eligibility: >-
+      Technical bar only — code well in Python plus linear algebra, calculus and
+      probability. Undergraduate eligibility not stated either way. Visa costs covered.
+    award: >-
+      4-5 week residential bootcamp at LISA in London. NO stipend — travel, visa,
+      accommodation and meals covered, but nothing in cash.
+    note: >-
+      ARENA 9.0 closed; 9.0 itself runs Oct 5 - Nov 6 2026, and a future iteration
+      has no date. Fill the expression-of-interest form. Residential in London
+      during a US autumn term, so it also needs a leave.
+
+  - name: LASR Labs — next cohort
+    link: https://www.lasrlabs.org/
+    kind: internship
+    track: AI safety
+    eligibility: >-
+      No undergraduate or visa statement on the page, which is itself a risk. In
+      practice the bar skews senior — successful candidates typically have prior LLM
+      research or PhDs in CS, physics or maths.
+    award: 13 weeks full-time in person in London, GBP 11,000 stipend plus food, office and travel.
+    note: >-
+      Runs twice a year; the Summer 2026 cohort (Jul 20 - Oct 16) is closed with no
+      next date. Weaker undergraduate target than SPAR or MATS given the de facto
+      seniority bar, and the right-to-work position is unstated.
+
+  - name: AI safety programs ruled out — recorded so you can skip them
+    link: https://www.apolloresearch.ai/careers
+    kind: internship
+    track: AI safety
+    eligibility: >-
+      APOLLO RESEARCH has no internship or residency at all — its careers page lists
+      only permanent staff roles. The student route in is via MATS, where Apollo runs
+      a mentor stream. VISTA INSTITUTE is AI law and policy with no technical research,
+      and its fellowship has no public application — you must first complete one of its
+      courses (next start Aug 10 and Aug 19). BERKELEY BASIS POLICY GROUP is a UC
+      Berkeley student discussion group, its page is stale (a year-less February
+      deadline and a Fall 2025 curriculum), and it produces no research output.
+    note: Recorded deliberately so these do not get re-researched each cycle.
+
+  # ---- Company postings from your list -----------------------------------
+
+  - name: Azulene Labs — internships (rolling)
+    link: https://www.azulenelabs.com/careers/internships
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: strong
+        why: Computational chemistry and AI, which is the closest commercial analogue to the PRISM work.
+    eligibility: >-
+      The most undergraduate-accessible thing on your whole list: "Current students
+      in computational chemistry, materials science, physics, computer science, or
+      related fields" — no PhD or graduate restriction. "Remote or on-site (within
+      and outside the US)", with no work-authorization language at all.
+    award: Rolling internship, Berkeley CA and Reno NV, or remote.
+    note: >-
+      OPEN NOW, no deadline. One caveat quoted from their page: "Internships are
+      often easiest to arrange when subsidized or supported by your university" —
+      so pairing this with SURF-style funding materially improves your odds. Apply
+      via the on-page form or contact@azulenelabs.com; they specifically ask for
+      "your most original analytical or computational accomplishments".
+
+  - name: Mistral — Applied Scientist / Research Engineer (Internship)
+    link: https://jobs.ashbyhq.com/mistral.ai/de46ba8b-00cb-4618-83df-66e15a78434e
+    kind: internship
+    track: Internship
+    eligibility: >-
+      No degree requirement stated — no PhD gate and no explicit undergraduate
+      exclusion; the closest line is "Demonstrated success through academic,
+      professional, or personal technical projects". Paris or London, so EU or UK
+      work authorization is the practical constraint.
+    note: >-
+      YOUR SAVED LINK IS DEAD. Mistral left Lever entirely (that jobs.lever.co URL
+      404s and their whole Lever board is gone) and moved to Ashby — the live
+      posting is the link above. Rolling, no deadline.
+
+  - name: Profluent — ML Research Intern (not currently open)
+    link: https://job-boards.greenhouse.io/profluent
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: strong
+        why: Protein language models are exactly PRISM's territory.
+    eligibility: Historically 12 weeks, hybrid 2-3 days on-site in Emeryville, about $1,667/week.
+    note: >-
+      YOUR SAVED LINK IS DEAD — that job ID 404s. Their live board has 14 roles, all
+      senior full-time, ZERO internships right now. The intern program does exist
+      (past "Machine Learning Research Intern" postings), so re-check the board in
+      the autumn rather than treating this as closed permanently.
+
+  - name: Lila Sciences — Co-Op, Data Extraction (the undergrad-eligible one)
+    link: https://job-boards.greenhouse.io/lilasciences
+    kind: internship
+    track: Internship
+    eligibility: >-
+      IMPORTANT SPLIT: both AI/bio co-ops are PhD-ONLY — "ML Scientist for Biology"
+      and "ML Scientist for Protein Engineering" each require current PhD enrolment.
+      The undergraduate-eligible route is "Co-Op, Data Extraction" (Cambridge MA),
+      which takes "a Bachelor's, Master's, or PhD"; "Co-Op, Automation" also accepts
+      a Bachelor's.
+    note: >-
+      Board is live with 10 co-ops and no stated deadlines. Worth knowing the ML
+      roles are closed to you now but open the moment you start a PhD.
+
+  - name: Epia Neuro — talent network only, not a job
+    link: https://jobs.ashbyhq.com/epianeuro/1e06baeb-4cb4-4fc3-b042-b2407f1a0e2b
+    kind: internship
+    track: Internship
+    eligibility: >-
+      Not a real opening. Their own text: "This is an evergreen opportunity to join
+      our Talent Network. While this role is not tied to a specific opening..."
+    note: >-
+      Their full board is 12 postings, all senior full-time at Alameda, with no
+      internships and no student roles. Submitting costs nothing but should not be
+      counted as an application.
+
+  - name: Companies still unresearched from your list
+    kind: internship
+    track: Internship
+    eligibility: >-
+      NOT YET VERIFIED — recorded so they are not forgotten: Allen Institute for AI
+      (AI2, including the Pre-Doctoral Young Investigator route and during-the-year
+      student roles), Arc Institute, Valence Labs, Cradle, Genentech computational
+      chemistry, Radical Numerics, Dreamfold, Phylo, SilicoLabs.
+    note: >-
+      The research pass on these did not complete. Nothing here is confirmed — do
+      not act on assumptions about any of them. Ask me to re-run this group.
+
+  # ---- PhD applications, Fall 2027 entry ---------------------------------
+  # STRUCTURAL WARNING, and it is the most confusing part of applying to these:
+  # Kempner, Columbia CTN, Stanford CMBC and Flatiron are INSTITUTES, not degree
+  # programs. You cannot apply to them. Each row below names the program you
+  # actually apply through.
+
+  - name: Gatsby Unit PhD + GCNU-SWC joint (UCL) — ONE application
+    link: https://www.ucl.ac.uk/life-sciences/gatsby/study-and-work/gatsby-unit-phd-programme
+    date: 2026-11-09
+    kind: phd
+    track: PhD
+    pin_date: true
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          Gatsby is the home of learning-dynamics theory (Saxe), which is exactly
+          the framework that would explain WHY Dale constraints cost plasticity.
+    eligibility: >-
+      "Full funding is available to all students, regardless of nationality" —
+      covers UCL fees for home AND international students plus a stipend. Unusually
+      open for a UK studentship. Very small: up to 6 per year for Gatsby, and the
+      joint GCNU-SWC route averages just 2.
+    note: >-
+      EARLIEST PhD DEADLINE AND ALREADY CONFIRMED FOR 2027 ENTRY — 17:00 GMT,
+      Monday 9 November 2026, roughly three weeks before the US December cluster,
+      so it must be prepared FIRST. Applications open mid-September 2026 via the
+      unit's OWN Gatsby Recruitment Portal, not UCL central admissions. One
+      application covers both: apply to Gatsby or SWC and tick the box to also be
+      considered for the joint programme. October 2027 start.
+
+  - name: Princeton Neuroscience Institute PhD
+    link: https://gradschool.princeton.edu/academics/fields-study/neuroscience
+    date: 2026-11-16
+    approx: true
+    kind: phd
+    track: PhD
+    fit:
+      - project: biocl
+        strength: strong
+        why: Computational psychiatry and learning theory; Daw is Director of Graduate Studies.
+    eligibility: Apply to the Princeton Graduate School naming Neuroscience as the field. GRE optional. Fee $75.
+    note: >-
+      UNUSUALLY EARLY — mid-November, about two weeks before the Dec 1 cluster.
+      Date is last cycle's (Nov 16) since Fall 2027 is not posted yet; re-check in
+      September. Unlike Columbia CTN and Kempner, PNI IS a degree-granting field
+      despite the "Institute" name.
+
+  - name: MIT Brain and Cognitive Sciences PhD
+    link: https://oge.mit.edu/programs/brain-and-cognitive-sciences/
+    date: 2026-12-01
+    kind: phd
+    track: PhD
+    fit:
+      - project: biocl
+        strength: strong
+        why: Fiete and Tenenbaum are both here, and BCS is itself the degree-granting department.
+    eligibility: >-
+      Direct departmental application. GRE NOT ACCEPTED — "BCS does not accept GRE
+      scores and will not consider GRE scores", so submitting them is pointless.
+      Fee $90. Opens Sept 1.
+
+  - name: Stanford Neurosciences PhD (the CMBC route)
+    link: https://med.stanford.edu/neurogradprogram/prospective_students.html
+    date: 2026-12-01
+    kind: phd
+    track: PhD
+    pin_date: true
+    fit:
+      - project: clera
+        strength: strong
+        why: Gwilliams' speech-neuroscience lab and the broader Wu Tsai orbit sit here.
+    eligibility: >-
+      Apply through Stanford Biosciences, not to a department. GRE not considered.
+      Fee waivers available via Biosciences Admissions.
+    note: >-
+      BEST-CONFIRMED DATE IN THE SET — explicitly year-stamped "Tuesday, December 1,
+      2026, at 11:59:59 PM (PST). Late applications will not be accepted."
+      IMPORTANT: the Center for Mind, Brain, Computation and Technology is NOT an
+      admissions route — it is a membership program you join AFTER enrolling.
+
+  - name: Columbia Neurobiology and Behavior PhD (the CTN route)
+    link: https://www.neurosciencephd.columbia.edu/content/application-process
+    date: 2026-12-01
+    kind: phd
+    track: PhD
+    fit:
+      - project: biocl
+        strength: strong
+        why: Litwin-Kumar, Abbott, Fusi and Stachenfeld are all CTN.
+    eligibility: >-
+      Apply via GSAS at the medical campus. GRE not required. US citizenship not required.
+    note: >-
+      THE CENTER FOR THEORETICAL NEUROSCIENCE IS NOT A PROGRAM. Its own page says
+      so and ranks the routes: it is "most closely associated with the Neurobiology
+      and Behavior program, and are very involved in admissions decisions for that
+      program". Statistics gets some involvement via Paninski and Cunningham; CS,
+      Physics and Biology get NONE. Their warning matters — students entering via
+      other programs "have generally not had problems finding a theory center
+      advisor... we can make no promises." Enter through N&B if CTN is the goal.
+
+  - name: Harvard PiN — Neuroscience PhD (Kempner route)
+    link: https://gsas.harvard.edu/program/neuroscience
+    date: 2026-12-01
+    kind: phd
+    track: PhD
+    fit:
+      - project: biocl
+        strength: strong
+        why: Named in all three Kempner fellow cohorts; the main neuro route into Kempner.
+    eligibility: GRE not accepted. Fee $105 with a self-service waiver questionnaire.
+    note: >-
+      Fall 2027 date explicitly posted. THE KEMPNER INSTITUTE IS NOT A DEGREE
+      PROGRAM — you apply to a GSAS PhD and the Kempner fellowship is an overlay
+      you are invited to apply for. Note Harvard splits: life-sciences routes (PiN,
+      Biophysics) close Dec 1, physical-science routes (CS, Applied Math, Physics)
+      Dec 15.
+
+  - name: Harvard CS / Applied Math PhD (most common Kempner routes)
+    link: https://gsas.harvard.edu/program/computer-science
+    date: 2026-12-15
+    kind: phd
+    track: PhD
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          Computer Science and Applied Math are the only two programs appearing in
+          ALL THREE Kempner cohorts — statistically the modal route in.
+    eligibility: GRE optional for both. Fee $105 with waiver.
+    note: >-
+      GRE TRAPS ELSEWHERE AT HARVARD, worth knowing before you pick a route:
+      PHYSICS REQUIRES the GRE Physics Subject Test (limited sitting dates, needs
+      months of lead time) and PSYCHOLOGY REQUIRES the GRE General. CS, Applied
+      Math, PiN and Biophysics do not.
+
+  - name: UPenn Neuroscience Graduate Group (the Kording route)
+    link: https://www.med.upenn.edu/bgs/admissions-faqs.html
+    date: 2026-12-01
+    kind: phd
+    track: PhD
+    pin_date: true
+    fit:
+      - project: clera
+        strength: strong
+        why: Kording's lab spans neuro and ML methodology, and he is unusually open to cold contact.
+    eligibility: >-
+      Via Biomedical Graduate Studies. GRE not accepted. NO APPLICATION FEE AT ALL.
+    note: >-
+      CONFIRMED year-stamped: "accepting applications for Fall 2027 from October 1st
+      through December 1st, 2026." TWO-SCHOOL SPLIT: Kording's PRIMARY appointment
+      is Bioengineering, which goes through Penn Engineering on Dec 15 with a fee —
+      a different system two weeks later. WARNING: his lab page currently says "the
+      Kording lab is not hiring", so email him before applying either way.
+
+  - name: ILLC Amsterdam — no annual PhD cycle
+    link: https://phdprogramme.illc.uva.nl/Programme/admission
+    kind: phd
+    track: PhD
+    eligibility: >-
+      Dutch model: PhDs are SALARIED EMPLOYEE positions advertised individually and
+      filled per-vacancy. "There is no particular time of the year during which you
+      should look out for these; they may be advertised at any time."
+    note: >-
+      NO DEADLINE EXISTS — this needs a recurring check of illc.uva.nl vacancies,
+      not a date. Their page warns against speculative applications. The standard
+      feeder is the MSc Logic, whose deadline IS nationality-split: 15 January for
+      non-EU/EEA applicants and for anyone seeking a UvA scholarship, 15 March for
+      EU/EEA.
+
+  - name: Flatiron Institute — no PhD exists
+    link: https://www.simonsfoundation.org/flatiron/careers/
+    kind: phd
+    track: PhD
+    eligibility: >-
+      DEFINITIVE: Flatiron does not grant PhDs. It is the Simons Foundation's
+      internal research division and hires staff. "Flatiron Research Fellow" is a
+      POSTDOCTORAL title.
+    note: >-
+      The real route into Flatiron CCN as a PhD student is to ENROL AT NYU and work
+      with a dual-appointed PI — Simoncelli, Chung and Williams all hold NYU Center
+      for Neural Science appointments. Separately, Summer at Simons internships
+      require existing enrolment and historically open around December for the
+      following summer.
+
+  # ---- Remaining internships ---------------------------------------------
+
+  - name: Arc Institute — AIxBio Fellows (undergraduate-only)
+    link: https://arcinstitute.org/programs/aixbio-fellows
+    date: 2027-01-01
+    approx: true
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: strong
+        why: AIxBio is precisely the PRISM intersection, and Brian Hie's Evo lab is at Arc.
+    eligibility: >-
+      UNDERGRADUATE-ONLY and unusually permissive on nationality: "Teams of 2-3
+      undergraduate students, formed independently within or across institutions",
+      "Be based in North America (no citizenship restrictions)". Part-time at about
+      10 hours a week for 6-12 months, remote, "intended to coincide with your
+      coursework" — so no leave of absence needed.
+    award: Stipend plus cloud and GPU compute, co-authorship opportunities, and a stated path to future Arc internships.
+    note: >-
+      "2027 applications available: January 2027" is the only date Arc publishes,
+      hence the approximate Jan 1 placeholder. THE CATCH IS THE TEAM: you must form
+      your own group of 2-3 undergraduates, so start finding collaborators well
+      before January. Note Arc's careers URL 404s; the real board is
+      job-boards.greenhouse.io/arcinstitute.
+
+  - name: Align Foundation — Protein Engineering Tournament (next round)
+    link: https://alignbio.org/the-tournament-program
+    date: 2026-11-01
+    approx: true
+    kind: student_prize
+    track: Award
+    fit:
+      - project: gauntlet
+        strength: strong
+        why: >-
+          Designs are synthesized and assayed under standardized protocols, so this is the
+          only forthcoming large-scale PAIRED in-silico/wet-lab enzyme dataset in existence.
+          It supplies the wet-lab arm the Gauntlet proxy audit currently has to infer from
+          published literature corpora.
+    eligibility: >-
+      "Students, faculty, startups, and scientists", individuals or teams, free to enter.
+      No explicit undergraduate clause and no stated team-size cap found on any reachable
+      page — confirm with the organizers before assuming.
+    award: $30,000 cash plus free DNA synthesis and wet-lab testing of submitted designs.
+    note: >-
+      NO NEW ROUND IS ANNOUNCED as of 2026-08-06 — the Nov 1 date is a PLACEHOLDER, not a
+      published deadline. The 2025 PETase round closed (generative phase ended ~April 2026)
+      and its URLs now 404; the program page states only that the tournament "runs
+      approximately every 18-24 months". There is no notification mechanism, so email
+      tournament@alignbio.org to get on the announcement list. Meanwhile the 2023 pilot data
+      is already usable: predictions plus measured expression, thermostability and specific
+      activity for ~1200 alpha-amylase variants, CC BY 4.0, at
+      github.com/Align-to-Innovate/the-protein-engineering-tournament-2023.
+
+  - name: Allen Institute for AI (Ai2) — summer internships
+    link: https://allenai.org/internships
+    date: 2026-10-01
+    approx: true
+    kind: internship
+    track: Internship
+    fit:
+      - project: biocl
+        strength: moderate
+        why: Ai2 does open-model research; they also posted a Young Investigator role in open language models for biology.
+    eligibility: >-
+      Undergraduates explicitly welcome — "Undergraduate or graduate students in
+      AI-related fields are invited to apply for full-time research internships",
+      and engineering internships are "available to junior and senior
+      undergraduates". Crucially: "International candidates are welcome to apply.
+      Pay is competitive, and visa sponsorship is available."
+    award: 12 weeks, full-time, on-site in Seattle, paid, with visa sponsorship.
+    note: >-
+      NOT OPEN YET. Their FAQ says "Opportunities for upcoming summer internships
+      are posted in the fall of the previous year", so the October placeholder is a
+      watch date, not a deadline. One of very few places offering undergraduates
+      visa sponsorship. Their Predoctoral Young Investigator role ($113,300,
+      Seattle) is open now but requires the bachelor's already in hand — a gap-year
+      option, not an internship.
+
+  - name: Dead ends confirmed — Valence Labs, Dreamfold, SilicoLabs, Phylo
+    link: https://job-boards.greenhouse.io/valencelabs
+    kind: internship
+    track: Internship
+    eligibility: >-
+      VALENCE LABS: no internship, no fellowship, no student roles — 5 full-time
+      research scientist posts only, and Recursion states outright "we are currently
+      not hiring interns for Summer 2026". Portal is now just a Substack newsletter
+      and the old Valence Scholars program appears discontinued.
+      DREAMFOLD: no careers page and no job board anywhere; also no longer Montreal
+      — its site lists Stanford Research Park, Palo Alto. Cold email info@dreamfold.ai.
+      SILICOLABS: no careers page, no listings, 4 staff. Also note it is XR/VR for
+      behavioural research, NOT AI-for-biology — likely a category mismatch.
+      PHYLO: 9 live roles, ALL full-time, no internships; the "Opportunistic Role"
+      is the only credential-agnostic door. Stanford spin-out behind Biomni, not
+      Mila-affiliated.
+    note: >-
+      Also checked: Mila's own research internships are GRADUATE-ONLY ("registered
+      in a graduate degree program"), and Mila Ventures provides no student channel
+      into its portfolio companies. Recorded so none of this gets re-researched.
+
+  - name: Genentech — Summer 2027 computational internships
+    link: https://careers.gene.com/us/en/internships
+    date: 2026-11-01
+    approx: true
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: strong
+        why: gRED computational sciences covers computational chemistry and ML for biology.
+    eligibility: >-
+      UNDERGRADUATE ELIGIBLE at program level: "We hire at all degree levels: BS,
+      MS, PharmD, and PhD. You must have completed at least one year of university,
+      and you must be within two years of your last degree attained." Caveat:
+      individual computational reqs often layer an MS/PhD preference on top.
+      "All internships are paid, so you must be legally authorized to work in the
+      United States"; international applicants accepted but "visa sponsorship
+      support varies by position and department."
+    award: Paid 10-12 week summer internship, mostly South San Francisco.
+    note: >-
+      THE ONE STRUCTURED DATE IN THIS GROUP, and it is a WINDOW not a deadline:
+      "Summer internships are posted on an ongoing basis starting in November until
+      March. Most hiring decisions for summer internships are made by the end of
+      March." So applying early in the window matters a great deal. The Nov 1
+      placeholder is when to start watching. All 2026 postings are now 410 Gone.
+
+  - name: Radical Numerics — watch, no student route yet
+    link: https://jobs.ashbyhq.com/radical-numerics
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: strong
+        why: >-
+          Worth correcting your notes: this is NOT a generic AI lab. Their own text
+          says "an AI research lab building general biological intelligence... Our
+          team created Evo, and started the field of generative genomics" — the same
+          Evo lineage as your ICBINB third-architecture plan.
+    eligibility: >-
+      16 postings, ALL full-time senior MTS roles, no internship or residency. Most
+      state no degree requirement at all; the Computational Biology role wants a PhD
+      "OR demonstrated experience in biotech". US work authorization required —
+      every posting carries the E-Verify line. San Francisco, some Tokyo.
+    note: >-
+      No student track exists today, so nothing to apply to. But given the Evo
+      connection this is a strong cold-outreach target rather than a job-board one —
+      the same angle as Brian Hie at Arc.
+
+  - name: Cradle — no internship program
+    link: https://jobs.ashbyhq.com/cradlebio
+    kind: internship
+    track: Internship
+    eligibility: >-
+      Six postings, all full-time; grepping every description for intern, student or
+      new-grad returns zero hits. Both scientific roles require a PhD. EU-centric
+      (Zurich, Amsterdam, Europe Remote) with a Boston cluster.
+    note: >-
+      No internship track. Their careers page has an open-application path, which is
+      the only realistic student route.
+
+  - name: HHMI Cech Fellows — Janelia and HHMI lab summer research
+    link: https://www.hhmi.org/programs/cech-fellows
+    date: 2026-11-10
+    kind: internship
+    track: Internship
+    fit:
+      - project: clera
+        strength: strong
+        why: Janelia is a premier neuroscience campus and this is now the only route into its summer research.
+    eligibility: >-
+      UNDERGRADUATE-ONLY and narrow: "Rising juniors and rising seniors enrolled
+      full-time at an accredited US institution". Immigration status is broad —
+      citizens, permanent residents and visa holders with work authorization — BUT
+      "HHMI does not sponsor visas for this program". No prior research required.
+    award: Funded summer research in an HHMI Investigator lab or at Janelia, with a symposium at Janelia.
+    note: >-
+      "November 10, 2026: Next competition opens" — a firmly dated, officially
+      stated opening. THIS REPLACES the Janelia Undergraduate Scholars Program,
+      whose page is stale at 2023 and now redirects here. You do NOT pick a lab:
+      "Please do not reach out to desired labs or lab heads about your application."
+      Last cycle closed Dec 22, so expect roughly six weeks from opening.
+
+  - name: Flatiron — Summer at Simons (CCN participates)
+    link: https://www.simonsfoundation.org/summer-at-simons/
+    date: 2026-12-01
+    approx: true
+    kind: internship
+    track: Internship
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          The Center for Computational Neuroscience is the strongest pure NeuroAI
+          match on the whole board, and unlike its PhD route this one is open to you.
+    eligibility: >-
+      "Interns must be enrolled in a degree-seeking program (undergraduate or
+      higher)" — no citizenship or home-institution restriction stated.
+    award: About 11 weeks, paid, with possible housing support near the Simons offices.
+    note: >-
+      DATE IS INFERRED — the page still shows last cycle's "Applications open on
+      December 1, 2025" and has not been rolled over, so early December 2026 is the
+      pattern, not a statement. Closing dates live on the individual postings, not
+      this page.
+
+  - name: Broad Institute — BSRP (Broad Summer Research Program)
+    link: https://www.broadinstitute.org/bsrp/broad-summer-research-program-bsrp
+    date: 2027-01-11
+    approx: true
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: strong
+        why: Broad's computational-biology labs are a direct match for the protein-language-model work.
+    eligibility: >-
+      UNDERGRADUATE-ONLY, enrolled at a four-year US college, GPA 3.2+, intending a
+      PhD or MD-PhD. HARD GATE: "Be legally authorized to work in the United States
+      at the time of applying". Also exclusive — "Students cannot be enrolled in
+      other courses, or programs... and/or employed outside this program."
+    award: $5,400 stipend, free housing, travel to and from Boston, plus conference travel.
+    note: >-
+      Date is last cycle's (Jan 11 2026) as a placeholder; Broad says to "check back
+      in October 2026" for updated eligibility, and the enrolment dates will shift a
+      year. Note the Eric and Wendy Schmidt Center is POSTDOC-ONLY with no
+      undergraduate route — its undergrads come through MIT UROP.
+
+  - name: Cold Spring Harbor Laboratory — Undergraduate Research Program
+    link: https://www.cshl.edu/education/undergraduate-research-program/
+    date: 2027-01-15
+    approx: true
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: moderate
+        why: CSHL's quantitative-biology and neuroscience labs fit, though it is broader than your niche.
+    eligibility: >-
+      "Current sophomores and juniors are eligible" — seniors are NOT. "Students of
+      any nationality are eligible", but foreign students must be enrolled full-time
+      at a US institution on a student visa. NSF-funded slots specifically require
+      US citizenship or permanent residency.
+    award: $7,000 stipend with room and board covered. June to August.
+    note: >-
+      The January 15 deadline is stated without a year, so it recurs; 2027 is
+      expected but not yet confirmed on the page.
+
+  - name: EMBL — undergraduate internships (direct to PI, rolling)
+    link: https://www.embl.org/about/info/undergraduates/how-to-apply/
+    kind: internship
+    track: Internship
+    fit:
+      - project: prism
+        strength: strong
+        why: EMBL Heidelberg's computational biology groups are world-class and reachable by direct email.
+    eligibility: >-
+      "EMBL welcomes undergraduate students of all disciplines in the natural
+      sciences" — no nationality or member-state restriction and no deadline.
+    note: >-
+      NO CENTRAL APPLICATION — "please directly contact the Group Leader(s) of your
+      choice", so this is cold outreach, not a form, and you can start now for
+      Summer 2027. PAY IS DISCRETIONARY and comes from the PI's grants. One trap
+      worth knowing: staying longer than three months can trigger EMBL's "prior
+      association" rule and affect later eligibility for their PhD programme — keep
+      a visit under three months if EMBL is a possible PhD destination.
+      NOTE EMBL-EBI's embassy internships are Master's-level and locked to French or
+      Dutch universities, so they are not a route for you.
+
+  - name: Champalimaud Foundation — research internships (rolling)
+    link: https://www.fchampalimaud.org/champalimaud-research/education
+    kind: internship
+    track: Internship
+    fit:
+      - project: clera
+        strength: moderate
+        why: Systems and computational neuroscience, and internships are explicitly aimed at undergraduates.
+    eligibility: >-
+      "Internship applicants (usually undergraduates) choose up to 5 labs to apply
+      to and, if accepted, will design their own project with the PI." No
+      citizenship or home-institution requirement. Up to six months.
+    note: >-
+      Rolling, no deadline — apply any time for Summer 2027. FUNDING IS UNSTATED on
+      their page, so assume unpaid unless the PI says otherwise. Contact
+      ori@research.fchampalimaud.org.
+
+  - name: Programs you are NOT eligible for — checked and ruled out
+    link: https://kempnerinstitute.harvard.edu/
+    kind: internship
+    track: Internship
+    eligibility: >-
+      KEMPNER KRANIUM: "Any continuing Harvard College undergraduate student" —
+      Harvard-only, as are KURE and the graduate fellowship. Only their
+      Post-Baccalaureate Program is open externally.
+      MILA RESEARCH INTERNSHIPS: graduate-only, must "be registered in a graduate
+      degree program" AND be invited by a Mila faculty member.
+      ALLEN INSTITUTE ASPIRE: postbaccalaureate only, bachelor's required before
+      start (opens Dec 2026). Their Summer Workshop on the Dynamic Brain is
+      PhD/postdoc-only, and the Shanahan Fellowship is for recent PhDs.
+      ISOMORPHIC LABS: states outright "Not at the moment" on internships.
+      IVADO undergraduate scholarships: dormant since 2022 and institution-locked.
+      CZ BIOHUB: internship page retired in the CZI rebrand; email sites directly.
+    note: >-
+      Recorded so none of this gets re-researched. Neuromatch Academy (opens Feb
+      2027) is open to you but is a COURSE, not a research position — it produces no
+      paper or lab affiliation and likely duplicates skills you already have.
+
+# ---------------------------------------------------------------------------
+# People to contact, and when to follow up.
+#
+# No email account is wired into this tool, so nothing here is read from your
+# inbox — you record when you last wrote to someone and the board computes the
+# next nudge as last_contacted + cadence_days. Set `last_contacted` in the row's
+# drawer as you go; leave it blank and the board shows `first_contact_by` instead.
+#
+#   first_contact_by  target date for the first email, if you have not written yet
+#   cadence_days      how long to wait before a follow-up
+#   last_contacted    YYYY-MM-DD of your last message (usually edited in the UI)
+outreach:
+
+  - name: CliMem organizer — send review and decision
+    kind: outreach
+    track: Outreach
+    first_contact_by: 2026-07-31
+    cadence_days: 3
+    note: >-
+      Owed: your review plus your decision on the paper. A scheduled reminder is
+      set for 9am on Jul 31. Short cadence because a review owed to an organizer is
+      blocking someone else's timeline, not just yours — if it slips, chase it in
+      three days rather than three weeks. Set "last contacted" once sent.
+  - name: Adrienne Fairhall (UW) — introduction
+    person: Adrienne Fairhall
+    affiliation: University of Washington — computational neuroscience
+    link: https://faculty.washington.edu/fairhall/
+    kind: outreach
+    track: Outreach
+    first_contact_by: 2026-08-14
+    cadence_days: 21
+    fit:
+      - project: biocl
+        strength: strong
+        why: >-
+          Adaptation and plasticity in neural coding is her area, and the
+          Critical-Period Dale result — that a biological constraint induces
+          accumulated loss of plasticity — is a concrete question to open with.
+      - project: clera
+        strength: moderate
+        why: Neural coding and dynamics background is relevant to EEG localization.
+    note: >-
+      You flagged this one yourself. Best opening is the specific negative result
+      rather than a general introduction: static Dale learns tasks 0-1 then sits at
+      chance, a fresh Dale net learns task 2 fine, so it is genuine loss of
+      plasticity rather than an implementation artifact. That is a real question,
+      not a request for time. Send BEFORE the Oct 13 DevAI deadline so any reply can
+      shape the abstract. If nothing comes back in three weeks, one short follow-up,
+      then leave it.
+
+  - name: AITHYRA / Gabriela Lobinska — PRISM submission check-in
+    person: Gabriela Lobinska
+    affiliation: AITHYRA, Vienna
+    kind: outreach
+    track: Outreach
+    first_contact_by: 2026-08-07
+    cadence_days: 10
+    fit:
+      - project: prism
+        strength: strong
+        why: Your PRISM co-author; three papers are due in the same 48 hours.
+    note: >-
+      Time-critical rather than optional. Before Aug 29 you need agreement on
+      author order across all three papers, a decision on whether ICBINB ships
+      without Evo2 if A100 access does not materialise, and who re-runs the ESMFold
+      pilot for SIMBIOCHEM. Tighter cadence here because the deadline is fixed.
+
+  - name: Caltech fellowships office — Goldwater and CRA nomination
+    affiliation: Caltech
+    kind: outreach
+    track: Outreach
+    first_contact_by: 2026-08-10
+    cadence_days: 14
+    note: >-
+      THE HIGHEST-LEVERAGE EMAIL ON THIS BOARD. Both CRA (Oct 14) and Goldwater
+      (campus process from September) are nomination-only with hard institutional
+      quotas — four students each. Whoever is in the room in September decides
+      whether you are eligible at all, so the internal timeline matters more than
+      the published one. Ask three things: when the internal competitions open, what
+      they want to see, and whether Caltech is an Astronaut Scholarship partner
+      (that one could not be confirmed and decides whether it is worth any effort).
+
+  - name: Department chair / research advisor — CRA nomination
+    kind: outreach
+    track: Outreach
+    first_contact_by: 2026-08-21
+    cadence_days: 14
+    fit:
+      - project: prism
+        strength: strong
+        why: The nomination packet is built from your research record, and PRISM is the strongest part of it.
+    note: >-
+      Separate from the fellowships office: the CRA nomination is submitted by the
+      department chair, and departments granting computing PhDs may nominate only
+      four students a year. Send after the fellowships office replies so you know
+      the internal process, but well before September when the selection happens.
+
+  - name: Microsoft Research URIC — reference letter writers
+    kind: outreach
+    track: Outreach
+    first_contact_by: 2026-08-28
+    cadence_days: 14
+    note: >-
+      URIC needs TWO reference letters plus a cover letter and research samples, and
+      it has historically used a hard deadline rather than rolling review. The Summer
+      2027 call is not posted yet, so ask now and have letters ready rather than
+      scrambling when it opens. Six weeks of notice is the polite minimum.
