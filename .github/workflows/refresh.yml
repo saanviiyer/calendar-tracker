@@ -39,10 +39,13 @@ jobs:
         run: |
           git config user.name "deadline-bot"
           git config user.email "actions@github.com"
+          # deadlines.json and index.html are gitignored, because a local copy
+          # carries whatever is in your contacts.yml. CI builds them from
+          # venues.yml alone, so -f is needed to publish the board.
           if git diff --quiet -- deadlines.json index.html; then
             echo "No deadline changes."
           else
-            git add deadlines.json index.html
+            git add -f deadlines.json index.html
             git commit -m "Refresh deadlines ($(date -u +%Y-%m-%d))"
             git push
           fi

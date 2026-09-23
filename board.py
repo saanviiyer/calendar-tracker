@@ -31,7 +31,7 @@
 
   Tasks — things to do with no deadline attached
     python3 board.py --add "email Cognita AI"          open task, no date
-    python3 board.py --add "email Ashmitha" --on 8-14  put it on the calendar
+    python3 board.py --add "email a collaborator" --on 8-14  put it on the calendar
     python3 board.py --tasks                            list open tasks
     python3 board.py --due 2 8-14                       give an existing task a date
     python3 board.py --due 2 none                       take the date back off

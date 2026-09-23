@@ -1,0 +1,14 @@
+# Copy to contacts.yml and fill in. contacts.yml is gitignored, because it
+# holds other people's names and your notes about them.
+#
+# Only entries with `first_contact_by` become rows on the board. Everything
+# else stays here until you promote it.
+
+clusters:
+  - name: Example cluster
+    people:
+      - name: A Researcher
+        where: Some University
+        angle: "One specific question about their work."
+        first_contact_by: 2026-12-01
+        cadence_days: 30

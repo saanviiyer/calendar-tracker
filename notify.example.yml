@@ -1,0 +1,24 @@
+# Copy to notify.yml and fill in. notify.yml is gitignored.
+# Nothing is sent without --send.
+
+# messages | ntfy
+channel: messages
+
+# For channel: messages. Your own number, or the Apple ID you iMessage
+# yourself at. Include the country code.
+to: "YOUR_NUMBER_HERE"
+
+# For channel: ntfy. Install the ntfy app and subscribe to this topic.
+# The topic name works as the password, so make it long and unguessable.
+ntfy_topic: "change-me-to-something-long-and-random"
+
+fallback: ntfy
+
+# How many days ahead counts as coming up.
+days: 3
+
+max_items: 6
+name_width: 34
+
+# Skip the message when there is nothing to report.
+quiet_when_empty: true
